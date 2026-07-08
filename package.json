@@ -1,0 +1,23 @@
+{
+  "name": "hopchat",
+  "version": "0.1.0",
+  "description": "Migrate AI CLI chat sessions between tools (Copilot CLI, Claude Code, and more)",
+  "bin": {
+    "hopchat": "./bin/hopchat.js"
+  },
+  "main": "cli.js",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node --test test/"
+  },
+  "license": "MIT",
+  "files": [
+    "bin",
+    "cli.js",
+    "core",
+    "platforms",
+    "README.md"
+  ]
+}
