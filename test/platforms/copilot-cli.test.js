@@ -154,4 +154,33 @@ test('readChat throws a clear user-facing error when the chat has no cwd', () =>
   }
 });
 
+test('writeChat round-trips a title and cwd containing special characters exactly', () => {
+  const ir = {
+    sourcePlatform: 'copilot-cli',
+    sourceChatId: 'orig-special',
+    title: 'Has: a colon, "a quote", a \\backslash, and\na newline',
+    cwd: 'C:\\repo with space',
+    gitBranch: 'feature/x:y',
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:01:00.000Z',
+    turns: [{ role: 'user', text: 'hi' }],
+  };
+
+  let newChatId;
+  try {
+    withFakeHome(() => {
+      const result = writeChat(ir);
+      newChatId = result.newChatId;
+      const readBack = readChat(newChatId);
+      assert.equal(readBack.title, ir.title, 'title preserved exactly (colon/quote/backslash/newline)');
+      assert.equal(readBack.cwd, ir.cwd, 'cwd with space preserved');
+      assert.equal(readBack.gitBranch, ir.gitBranch, 'branch with colon preserved');
+    });
+  } finally {
+    if (newChatId) {
+      fs.rmSync(path.join(FIXTURE_ROOT, '.copilot', 'session-state', newChatId), { recursive: true, force: true });
+    }
+  }
+});
+
 module.exports = { withFakeHome, FIXTURE_ROOT };

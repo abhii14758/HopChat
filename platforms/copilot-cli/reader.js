@@ -15,7 +15,17 @@ function parseWorkspaceYaml(content) {
     const separatorIndex = line.indexOf(':');
     if (separatorIndex === -1) continue;
     const key = line.slice(0, separatorIndex).trim();
-    const value = line.slice(separatorIndex + 1).trim();
+    let value = line.slice(separatorIndex + 1).trim();
+    // Unquote double-quoted values written by our own writer. Single-pass so a
+    // restored backslash (from "\\") isn't re-consumed by a following "\n".
+    // Bare values (e.g. legacy/real Copilot workspace.yaml files) pass through.
+    if (value.length >= 2 && value.startsWith('"') && value.endsWith('"')) {
+      value = value.slice(1, -1).replace(/\\(.)/g, (_m, c) => {
+        if (c === 'n') return '\n';
+        if (c === 'r') return '\r';
+        return c; // covers \", \\, and any other escaped char
+      });
+    }
     result[key] = value;
   }
   return result;

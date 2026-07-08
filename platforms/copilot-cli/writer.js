@@ -5,14 +5,27 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { sessionRoot } = require('./reader');
 
+// Quote a string value for our flat single-line YAML. Always double-quotes so
+// the reader can unquote unambiguously; escapes backslash, double-quote, and
+// CR/LF so a title/cwd/branch containing them round-trips without corrupting
+// the file (a bare newline would otherwise become a new YAML line and be lost).
+function yamlQuote(value) {
+  const escaped = String(value)
+    .replace(/\\/g, '\\\\')
+    .replace(/"/g, '\\"')
+    .replace(/\n/g, '\\n')
+    .replace(/\r/g, '\\r');
+  return `"${escaped}"`;
+}
+
 function toWorkspaceYaml(ir, newId) {
   const lines = [
     `id: ${newId}`,
-    `cwd: ${ir.cwd}`,
-    `git_root: ${ir.cwd}`,
-    `branch: ${ir.gitBranch || ''}`,
+    `cwd: ${yamlQuote(ir.cwd)}`,
+    `git_root: ${yamlQuote(ir.cwd)}`,
+    `branch: ${yamlQuote(ir.gitBranch || '')}`,
     `client_name: hopchat`,
-    `name: ${ir.title}`,
+    `name: ${yamlQuote(ir.title)}`,
     `user_named: false`,
     `summary_count: 0`,
     `created_at: ${ir.createdAt}`,
