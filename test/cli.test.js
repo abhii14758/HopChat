@@ -2,7 +2,7 @@
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { parseFlags, printTableRows, buildVersionWarning } = require('../cli');
+const { parseFlags, printTableRows, buildVersionWarning, run } = require('../cli');
 
 test('parseFlags splits --key value pairs from positional args', () => {
   const { flags, positional } = parseFlags(['--from', 'copilot-cli', '--to', 'claude-code', 'chat-123']);
@@ -52,4 +52,51 @@ test('buildVersionWarning warns when the installed CLI could not be verified', (
 
 test('buildVersionWarning returns null when no version descriptor is provided', () => {
   assert.equal(buildVersionWarning(null, { installed: '1.0.0', supported: true, verified: true }), null);
+});
+
+function captureConsole(fn) {
+  const originalLog = console.log;
+  const originalError = console.error;
+  const out = [];
+  const err = [];
+  console.log = (...args) => out.push(args.join(' '));
+  console.error = (...args) => err.push(args.join(' '));
+  try {
+    fn();
+  } finally {
+    console.log = originalLog;
+    console.error = originalError;
+  }
+  return { out, err };
+}
+
+test('run prints help and exits 0 for --help, -h, help, and no command', () => {
+  for (const argv of [['--help'], ['-h'], ['help'], []]) {
+    process.exitCode = undefined;
+    const { out } = captureConsole(() => run(argv));
+    assert.match(out.join('\n'), /Usage:/);
+    assert.match(out.join('\n'), /hopchat migrate --from/);
+    assert.equal(process.exitCode, undefined);
+  }
+});
+
+test('run sets exit code 1 and prints usage for an unknown command', () => {
+  process.exitCode = undefined;
+  const { err } = captureConsole(() => run(['bogus-command']));
+  assert.match(err.join('\n'), /Unknown command "bogus-command"/);
+  assert.equal(process.exitCode, 1);
+  process.exitCode = undefined;
+});
+
+test('printTableRows truncates values longer than the column cap with an ellipsis', () => {
+  const longCwd = 'C:\\' + 'a'.repeat(80);
+  const lines = printTableRows([{ id: 'a1', cwd: longCwd }], ['id', 'cwd']);
+  const dataLine = lines[2];
+  assert.ok(!dataLine.includes(longCwd), 'the full untruncated path should not appear');
+  assert.match(dataLine, /…/);
+});
+
+test('printTableRows leaves short values untouched', () => {
+  const lines = printTableRows([{ id: 'a1', title: 'Short title' }], ['id', 'title']);
+  assert.match(lines[2], /a1\s+Short title/);
 });

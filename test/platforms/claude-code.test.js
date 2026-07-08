@@ -81,6 +81,60 @@ test('writeChat writes a session file readChat can parse back', () => {
   }
 });
 
+test('writeChat emits the last-prompt/mode/permission-mode header claude --resume requires', () => {
+  const ir = {
+    sourcePlatform: 'copilot-cli',
+    sourceChatId: 'orig-2',
+    title: 'Header check',
+    cwd: 'C:\\repo\\header-check',
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:01:00.000Z',
+    turns: [
+      { role: 'user', text: 'Hello' },
+      { role: 'assistant', text: 'Hi there' },
+    ],
+  };
+
+  let newChatId;
+  try {
+    withFakeHome(() => {
+      const result = writeChat(ir);
+      newChatId = result.newChatId;
+      const filePath = path.join(
+        FIXTURE_ROOT,
+        '.claude',
+        'projects',
+        sanitizeCwdToProjectDir(ir.cwd),
+        `${newChatId}.jsonl`
+      );
+      const lines = fs.readFileSync(filePath, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+
+      assert.equal(lines[0].type, 'last-prompt');
+      assert.equal(lines[0].sessionId, newChatId);
+      assert.equal(lines[1].type, 'mode');
+      assert.equal(lines[2].type, 'permission-mode');
+
+      const lastEntry = lines[lines.length - 1];
+      assert.equal(lines[0].leafUuid, lastEntry.uuid, 'leafUuid must match the last message uuid');
+
+      const messageEntries = lines.slice(3);
+      assert.equal(messageEntries[0].parentUuid, null, 'first message has no parent');
+      for (let i = 1; i < messageEntries.length; i++) {
+        assert.equal(
+          messageEntries[i].parentUuid,
+          messageEntries[i - 1].uuid,
+          `entry ${i} must chain parentUuid to the previous entry's uuid`
+        );
+      }
+    });
+  } finally {
+    if (newChatId) {
+      const projectDir = path.join(FIXTURE_ROOT, '.claude', 'projects', sanitizeCwdToProjectDir(ir.cwd));
+      fs.rmSync(projectDir, { recursive: true, force: true });
+    }
+  }
+});
+
 test('readChat throws a clear user-facing error when the chat has no cwd', () => {
   const projectDir = path.join(FIXTURE_ROOT, '.claude', 'projects', 'sample-project');
   const file = path.join(projectDir, 'fixture-no-cwd.jsonl');

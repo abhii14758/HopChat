@@ -5,13 +5,18 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { projectsRoot, sanitizeCwdToProjectDir } = require('./reader');
 
-function turnToEntry(turn, sessionId, cwd, gitBranch, model) {
+// Claude Code reconstructs a conversation by walking `parentUuid` backwards
+// from the last entry's uuid — entries whose parentUuid doesn't chain to the
+// previous entry are dropped from the reconstructed transcript even though
+// they're present in the file. `parentUuid` must be the previous entry's
+// `uuid` (null only for the very first entry in the session).
+function turnToEntry(turn, sessionId, cwd, gitBranch, model, parentUuid) {
   const timestamp = new Date().toISOString();
   const uuid = crypto.randomUUID();
 
   if (turn.role === 'user') {
     return {
-      parentUuid: null,
+      parentUuid,
       isSidechain: false,
       type: 'user',
       message: { role: 'user', content: turn.text },
@@ -30,7 +35,7 @@ function turnToEntry(turn, sessionId, cwd, gitBranch, model) {
   }
 
   return {
-    parentUuid: null,
+    parentUuid,
     isSidechain: false,
     type: 'assistant',
     message: {
@@ -49,6 +54,18 @@ function turnToEntry(turn, sessionId, cwd, gitBranch, model) {
   };
 }
 
+// Real Claude Code session files start with a `last-prompt` index line whose
+// `leafUuid` points at the final message's uuid, followed by `mode` and
+// `permission-mode` lines. Without this header `claude --resume` reports
+// "No conversation found" even though the message entries are well-formed.
+function headerLines(sessionId, leafUuid) {
+  return [
+    { type: 'last-prompt', leafUuid, sessionId },
+    { type: 'mode', mode: 'normal', sessionId },
+    { type: 'permission-mode', permissionMode: 'default', sessionId },
+  ];
+}
+
 function writeChat(ir) {
   const sessionId = crypto.randomUUID();
   const projectDirName = sanitizeCwdToProjectDir(ir.cwd);
@@ -58,8 +75,15 @@ function writeChat(ir) {
   try {
     fs.mkdirSync(projectDir, { recursive: true });
 
-    const entries = ir.turns.map((turn) => turnToEntry(turn, sessionId, ir.cwd, ir.gitBranch, ir.model));
-    const jsonl = entries.map((e) => JSON.stringify(e)).join('\n') + '\n';
+    let parentUuid = null;
+    const entries = ir.turns.map((turn) => {
+      const entry = turnToEntry(turn, sessionId, ir.cwd, ir.gitBranch, ir.model, parentUuid);
+      parentUuid = entry.uuid;
+      return entry;
+    });
+    const leafUuid = entries.length > 0 ? entries[entries.length - 1].uuid : crypto.randomUUID();
+    const allLines = [...headerLines(sessionId, leafUuid), ...entries];
+    const jsonl = allLines.map((e) => JSON.stringify(e)).join('\n') + '\n';
     fs.writeFileSync(filePath, jsonl);
 
     return { newChatId: sessionId, resumeCommand: `claude --resume ${sessionId}` };

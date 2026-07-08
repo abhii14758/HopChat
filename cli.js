@@ -62,14 +62,28 @@ function parseFlags(args) {
   return { flags, positional };
 }
 
+// Per-column max width so long titles/paths don't blow out the terminal and
+// wrap unpredictably. Values longer than the cap are truncated with an
+// ellipsis; terminal width itself is respected via a total-width fallback
+// when stdout isn't a TTY (e.g. piped output) or columns is unset.
+const COLUMN_MAX_WIDTH = { id: 36, title: 40, updatedAt: 24, cwd: 48 };
+
+function truncate(value, max) {
+  const str = String(value ?? '');
+  if (str.length <= max) return str;
+  return str.slice(0, Math.max(0, max - 1)) + '…';
+}
+
 function printTableRows(rows, columns) {
   if (rows.length === 0) return ['(no chats found)'];
-  const widths = columns.map((col) => Math.max(col.length, ...rows.map((row) => String(row[col] ?? '').length)));
+  const capFor = (col) => COLUMN_MAX_WIDTH[col] ?? 30;
+  const cells = rows.map((row) => columns.map((c) => truncate(row[c], capFor(c))));
+  const widths = columns.map((col, i) => Math.max(col.length, ...cells.map((row) => row[i].length)));
   const formatRow = (values) => values.map((v, i) => String(v).padEnd(widths[i])).join('  ');
   return [
     formatRow(columns),
     widths.map((w) => '-'.repeat(w)).join('  '),
-    ...rows.map((row) => formatRow(columns.map((c) => row[c] ?? ''))),
+    ...cells.map((row) => formatRow(row)),
   ];
 }
 
@@ -108,13 +122,41 @@ function cmdPlatforms() {
   }
 }
 
+const HELP_TEXT = `hopchat — migrate AI CLI chat sessions between tools
+
+Usage:
+  hopchat <command> [options]
+
+Commands:
+  list <platform>                          List chats found for a platform
+  migrate --from <platform> --to <platform> <chat-id>
+                                            Migrate a chat from one platform to another
+  platforms                                List supported platform names
+  help, --help, -h                         Show this help
+
+Examples:
+  hopchat list copilot-cli
+  hopchat list claude-code
+  hopchat migrate --from copilot-cli --to claude-code 1d5a6952-f893-4173-8aaa-d51876acf5c0
+  hopchat platforms
+
+After a successful migrate, run the printed resume command (e.g. "claude --resume <id>")
+in the target tool to continue the conversation.`;
+
+function cmdHelp() {
+  console.log(HELP_TEXT);
+}
+
+const HELP_FLAGS = new Set(['help', '--help', '-h']);
+
 function run(argv) {
   const [command, ...rest] = argv;
   try {
+    if (!command || HELP_FLAGS.has(command)) return cmdHelp();
     if (command === 'list') return cmdList(rest);
     if (command === 'migrate') return cmdMigrate(rest);
     if (command === 'platforms') return cmdPlatforms();
-    console.error(`Unknown command "${command || ''}". Try: list, migrate, platforms`);
+    console.error(`Unknown command "${command}". Try: list, migrate, platforms, help`);
     process.exitCode = 1;
   } catch (err) {
     console.error(`Error: ${err.message}`);
