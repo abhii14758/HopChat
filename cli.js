@@ -1,7 +1,9 @@
 'use strict';
 
+const chalk = require('chalk');
+const cliProgress = require('cli-progress');
 const { registerPlatform, listPlatforms, getPlatform } = require('./core/registry');
-const { migrate } = require('./core/migrate');
+const { migrate, STAGES } = require('./core/migrate');
 const { checkCompatibility } = require('./core/version-check');
 
 registerPlatform('copilot-cli', {
@@ -144,7 +146,41 @@ function cmdList(args) {
   }
 }
 
-function cmdMigrate(args) {
+// Playful per-stage labels shown as the progress bar advances. STAGES (from
+// core/migrate.js) is the source of truth for ordering/count; this just adds
+// the display text for each one. Kept separate from core so migrate() itself
+// never needs to know these strings exist.
+const STAGE_LABELS = {
+  reading: 'Reading chat from source...',
+  validating: 'Double-checking nothing got lost in translation...',
+  writing: 'Teleporting turns to the target platform...',
+  done: 'Chat has landed!',
+};
+
+function printMetadataPanel({ from, to, chatId, info }) {
+  const line = (label, value) => `  ${chalk.dim(label.padEnd(10))} ${value}`;
+  console.log(chalk.bold(`\n${chalk.cyan(from)} ${chalk.dim('->')} ${chalk.cyan(to)}`));
+  console.log(line('Chat', chalk.white(info.title || '(untitled)')));
+  console.log(line('Turns', chalk.white(String(info.turnCount))));
+  if (info.model) console.log(line('Model', chalk.white(info.model)));
+  if (info.cwd) console.log(line('Project', chalk.white(info.cwd)));
+  console.log(line('Source ID', chalk.dim(chatId)));
+  console.log('');
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// Local file migration finishes in milliseconds -- there's no real
+// byte-by-byte progress to show. Rather than flash the bar through 4 steps
+// in one tick, migrate() first runs to completion (capturing each stage's
+// metadata via onStage), then the CLI replays those stages with a small
+// delay each so the bar is actually visible and readable, not a blink.
+// Tests set HOPCHAT_NO_ANIMATION=1 to skip the delay and run instantly.
+const STAGE_DISPLAY_DELAY_MS = process.env.HOPCHAT_NO_ANIMATION ? 0 : 300;
+
+async function cmdMigrate(args) {
   const { flags, positional } = parseFlags(args);
   const chatId = positional[0];
   if (!flags.from || !flags.to || !chatId) {
@@ -154,9 +190,42 @@ function cmdMigrate(args) {
   }
   warnIfUnsupported(flags.from);
   warnIfUnsupported(flags.to);
-  const result = migrate({ from: flags.from, to: flags.to, chatId });
-  console.log(`Migrated ${flags.from} chat "${chatId}" to ${flags.to}.`);
-  console.log(`Resume with: ${result.resumeCommand}`);
+
+  const stageEvents = [];
+  const result = migrate({
+    from: flags.from,
+    to: flags.to,
+    chatId,
+    onStage(stage, info) {
+      stageEvents.push({ stage, info });
+    },
+  });
+
+  const readingEvent = stageEvents.find((e) => e.stage === 'reading');
+  if (readingEvent) {
+    printMetadataPanel({ from: flags.from, to: flags.to, chatId, info: readingEvent.info });
+  }
+
+  const bar = new cliProgress.SingleBar(
+    {
+      format: `  ${chalk.cyan('{bar}')} {percentage}% | ${chalk.dim('{stageLabel}')}`,
+      barCompleteChar: '█',
+      barIncompleteChar: '░',
+      hideCursor: true,
+      clearOnComplete: false,
+    },
+    cliProgress.Presets.shades_classic
+  );
+  bar.start(STAGES.length, 0, { stageLabel: STAGE_LABELS[stageEvents[0]?.stage ?? 'reading'] });
+
+  for (const [index, { stage }] of stageEvents.entries()) {
+    await sleep(STAGE_DISPLAY_DELAY_MS);
+    bar.update(index + 1, { stageLabel: STAGE_LABELS[stage] });
+  }
+  bar.stop();
+
+  console.log(chalk.green(`\n✔ Migrated "${chatId}" from ${flags.from} to ${flags.to}.`));
+  console.log(`  ${chalk.dim('Resume with:')} ${chalk.bold(result.resumeCommand)}\n`);
 }
 
 function cmdPlatforms() {
@@ -192,12 +261,12 @@ function cmdHelp() {
 
 const HELP_FLAGS = new Set(['help', '--help', '-h']);
 
-function run(argv) {
+async function run(argv) {
   const [command, ...rest] = argv;
   try {
     if (!command || HELP_FLAGS.has(command)) return cmdHelp();
     if (command === 'list') return cmdList(rest);
-    if (command === 'migrate') return cmdMigrate(rest);
+    if (command === 'migrate') return await cmdMigrate(rest);
     if (command === 'platforms') return cmdPlatforms();
     console.error(`Unknown command "${command}". Try: list, migrate, platforms, help`);
     process.exitCode = 1;

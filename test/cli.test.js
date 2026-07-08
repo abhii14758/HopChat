@@ -1,8 +1,14 @@
 'use strict';
 
+process.env.HOPCHAT_NO_ANIMATION = '1';
+
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
+const path = require('node:path');
+const os = require('node:os');
+const fs = require('node:fs');
 const { parseFlags, printTableRows, buildVersionWarning, run } = require('../cli');
+const claudeReader = require('../platforms/claude-code/reader');
 
 test('parseFlags splits --key value pairs from positional args', () => {
   const { flags, positional } = parseFlags(['--from', 'copilot-cli', '--to', 'claude-code', 'chat-123']);
@@ -90,7 +96,7 @@ test('buildVersionWarning returns null when no version descriptor is provided', 
   assert.equal(buildVersionWarning(null, { installed: '1.0.0', supported: true, verified: true }), null);
 });
 
-function captureConsole(fn) {
+async function captureConsole(fn) {
   const originalLog = console.log;
   const originalError = console.error;
   const out = [];
@@ -98,7 +104,7 @@ function captureConsole(fn) {
   console.log = (...args) => out.push(args.join(' '));
   console.error = (...args) => err.push(args.join(' '));
   try {
-    fn();
+    await fn();
   } finally {
     console.log = originalLog;
     console.error = originalError;
@@ -106,19 +112,19 @@ function captureConsole(fn) {
   return { out, err };
 }
 
-test('run prints help and exits 0 for --help, -h, help, and no command', () => {
+test('run prints help and exits 0 for --help, -h, help, and no command', async () => {
   for (const argv of [['--help'], ['-h'], ['help'], []]) {
     process.exitCode = undefined;
-    const { out } = captureConsole(() => run(argv));
+    const { out } = await captureConsole(() => run(argv));
     assert.match(out.join('\n'), /Usage:/);
     assert.match(out.join('\n'), /hopchat migrate --from/);
     assert.equal(process.exitCode, undefined);
   }
 });
 
-test('run sets exit code 1 and prints usage for an unknown command', () => {
+test('run sets exit code 1 and prints usage for an unknown command', async () => {
   process.exitCode = undefined;
-  const { err } = captureConsole(() => run(['bogus-command']));
+  const { err } = await captureConsole(() => run(['bogus-command']));
   assert.match(err.join('\n'), /Unknown command "bogus-command"/);
   assert.equal(process.exitCode, 1);
   process.exitCode = undefined;
@@ -164,4 +170,37 @@ test('printTableRows keeps every line within the terminal width even when id + g
 test('printTableRows leaves short values untouched', () => {
   const lines = printTableRows([{ id: 'a1', title: 'Short title' }], ['id', 'title']);
   assert.match(lines[2], /a1\s+Short title/);
+});
+
+const MIGRATE_FIXTURE_ROOT = path.join(__dirname, 'fixtures', 'copilot-cli');
+
+test('cmdMigrate prints metadata (title, turn count, cwd) and the resume command', async () => {
+  const original = os.homedir;
+  os.homedir = () => MIGRATE_FIXTURE_ROOT;
+  let newChatId;
+  try {
+    const { out } = await captureConsole(() =>
+      run(['migrate', '--from', 'copilot-cli', '--to', 'claude-code', 'fixture-chat-001'])
+    );
+    const text = out.join('\n');
+
+    assert.match(text, /copilot-cli/);
+    assert.match(text, /claude-code/);
+    assert.match(text, /Sample Fixture Chat/, 'chat title from the fixture should be shown');
+    assert.match(text, /Turns/);
+    assert.match(text, /Resume with:/);
+    assert.match(text, /claude --resume/);
+
+    const match = text.match(/claude --resume ([0-9a-f-]{36})/);
+    assert.ok(match, 'resume command should contain a session id');
+    newChatId = match[1];
+  } finally {
+    os.homedir = original;
+    if (newChatId) {
+      fs.rmSync(
+        path.join(MIGRATE_FIXTURE_ROOT, '.claude', 'projects', claudeReader.sanitizeCwdToProjectDir('C:\\repo\\sample-project')),
+        { recursive: true, force: true }
+      );
+    }
+  }
 });

@@ -24,7 +24,7 @@ hopchat migrate --from copilot-cli --to claude-code <chat-id>
 hopchat platforms
 ```
 
-After a `migrate`, hopchat prints the resume command for the target tool (e.g. `claude --resume <new-id>`). Run it and the target CLI loads the migrated chat as a normal, resumable session.
+A `migrate` shows the chat's metadata (title, turn count, model, project path) up front, a progress bar while the migration runs, then the resume command for the target tool (e.g. `claude --resume <new-id>`). Run that command and the target CLI loads the migrated chat as a normal, resumable session.
 
 ### Fidelity
 
