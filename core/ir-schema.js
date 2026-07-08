@@ -2,6 +2,8 @@
 
 const VALID_ROLES = new Set(['user', 'assistant']);
 
+const ISO_8601_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?(Z|[+-]\d{2}:\d{2})$/;
+
 function validateIR(ir) {
   const errors = [];
 
@@ -18,7 +20,7 @@ function validateIR(ir) {
 
   const requiredDates = ['createdAt', 'updatedAt'];
   for (const field of requiredDates) {
-    if (typeof ir[field] !== 'string' || Number.isNaN(Date.parse(ir[field]))) {
+    if (typeof ir[field] !== 'string' || !ISO_8601_PATTERN.test(ir[field]) || Number.isNaN(Date.parse(ir[field]))) {
       errors.push(`IR.${field} must be an ISO 8601 date string`);
     }
   }
