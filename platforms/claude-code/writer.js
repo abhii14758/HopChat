@@ -65,6 +65,14 @@ function writeChat(ir) {
     return { newChatId: sessionId, resumeCommand: `claude --resume ${sessionId}` };
   } catch (err) {
     fs.rmSync(filePath, { force: true });
+    // Remove the project dir too if this write created it and left it empty,
+    // so a failed migration doesn't litter an orphaned directory.
+    try {
+      const remaining = fs.readdirSync(projectDir);
+      if (remaining.length === 0) fs.rmSync(projectDir, { recursive: true, force: true });
+    } catch {
+      // projectDir may not exist or isn't readable; nothing more to clean.
+    }
     throw err;
   }
 }

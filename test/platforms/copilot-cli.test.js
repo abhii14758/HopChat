@@ -133,4 +133,25 @@ test('readChat keeps an assistant turn that has tool activity but no text', () =
   }
 });
 
+test('readChat throws a clear user-facing error when the chat has no cwd', () => {
+  const chatDir = path.join(FIXTURE_ROOT, '.copilot', 'session-state', 'fixture-no-cwd');
+  try {
+    fs.mkdirSync(chatDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(chatDir, 'workspace.yaml'),
+      'id: fixture-no-cwd\ngit_root: C:\\repo\nname: No cwd chat\ncreated_at: 2026-01-01T00:00:00.000Z\nupdated_at: 2026-01-01T00:00:00.000Z\n'
+    );
+    fs.writeFileSync(
+      path.join(chatDir, 'events.jsonl'),
+      '{"type":"session.start","data":{"sessionId":"fixture-no-cwd","version":1},"id":"e1","timestamp":"2026-01-01T00:00:00.000Z","parentId":null}\n' +
+        '{"type":"user.message","data":{"content":"hi"},"id":"e2","timestamp":"2026-01-01T00:00:01.000Z","parentId":"e1"}\n'
+    );
+    withFakeHome(() => {
+      assert.throws(() => readChat('fixture-no-cwd'), /no working directory/);
+    });
+  } finally {
+    fs.rmSync(chatDir, { recursive: true, force: true });
+  }
+});
+
 module.exports = { withFakeHome, FIXTURE_ROOT };

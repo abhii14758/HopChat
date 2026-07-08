@@ -81,4 +81,21 @@ test('writeChat writes a session file readChat can parse back', () => {
   }
 });
 
+test('readChat throws a clear user-facing error when the chat has no cwd', () => {
+  const projectDir = path.join(FIXTURE_ROOT, '.claude', 'projects', 'sample-project');
+  const file = path.join(projectDir, 'fixture-no-cwd.jsonl');
+  try {
+    fs.mkdirSync(projectDir, { recursive: true });
+    fs.writeFileSync(
+      file,
+      '{"type":"user","message":{"role":"user","content":"hi"},"uuid":"u1","timestamp":"2026-01-01T00:00:00.000Z","sessionId":"fixture-no-cwd","gitBranch":"main"}\n'
+    );
+    withFakeHome(() => {
+      assert.throws(() => readChat('fixture-no-cwd'), /no working directory/);
+    });
+  } finally {
+    fs.rmSync(file, { force: true });
+  }
+});
+
 module.exports = { withFakeHome, FIXTURE_ROOT };

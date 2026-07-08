@@ -124,7 +124,13 @@ function readChat(sessionId) {
   if (!filePath) {
     throw new Error(`No Claude Code chat found with session id "${sessionId}" under ${projectsRoot()}`);
   }
-  return parseSessionFile(filePath, sessionId);
+  const ir = parseSessionFile(filePath, sessionId);
+  if (!ir.cwd) {
+    throw new Error(
+      `Chat "${sessionId}" has no working directory (cwd) recorded and cannot be migrated. The target platform needs a cwd to place the migrated session.`
+    );
+  }
+  return ir;
 }
 
 function sanitizeCwdToProjectDir(cwd) {

@@ -2,6 +2,7 @@
 
 const { registerPlatform, listPlatforms, getPlatform } = require('./core/registry');
 const { migrate } = require('./core/migrate');
+const { checkCompatibility } = require('./core/version-check');
 
 registerPlatform('copilot-cli', {
   reader: require('./platforms/copilot-cli/reader'),
@@ -11,6 +12,40 @@ registerPlatform('claude-code', {
   reader: require('./platforms/claude-code/reader'),
   writer: require('./platforms/claude-code/writer'),
 });
+
+const SUPPORTED_VERSIONS = {
+  'copilot-cli': require('./platforms/copilot-cli/supported-versions'),
+  'claude-code': require('./platforms/claude-code/supported-versions'),
+};
+
+// Pure: given a platform's supported-versions descriptor and a checkCompatibility
+// result, return a warning string (or null when everything is fine). Kept pure so
+// it is unit-testable without shelling out to a real CLI binary.
+function buildVersionWarning(versions, compatResult) {
+  if (!versions || !compatResult) return null;
+  const [min, max] = versions.range;
+  if (!compatResult.verified) {
+    return `Warning: could not verify the installed "${versions.command}" version; the ${versions.command} session format may have changed. Migration will still be attempted.`;
+  }
+  if (!compatResult.supported) {
+    return `Warning: installed "${versions.command}" version ${compatResult.installed} is outside the tested range (${min} - ${max}); the session format may have changed. Migration will still be attempted.`;
+  }
+  return null;
+}
+
+// Impure: shells out to check the real installed CLI for `platform`, printing a
+// non-blocking warning to stderr if the version can't be confirmed. Never throws.
+function warnIfUnsupported(platform) {
+  const versions = SUPPORTED_VERSIONS[platform];
+  if (!versions) return; // platform ships no version descriptor; nothing to check
+  let message;
+  try {
+    message = buildVersionWarning(versions, checkCompatibility(versions.command, versions.range));
+  } catch {
+    return;
+  }
+  if (message) console.error(message);
+}
 
 function parseFlags(args) {
   const flags = {};
@@ -60,6 +95,8 @@ function cmdMigrate(args) {
     process.exitCode = 1;
     return;
   }
+  warnIfUnsupported(flags.from);
+  warnIfUnsupported(flags.to);
   const result = migrate({ from: flags.from, to: flags.to, chatId });
   console.log(`Migrated ${flags.from} chat "${chatId}" to ${flags.to}.`);
   console.log(`Resume with: ${result.resumeCommand}`);
@@ -85,4 +122,4 @@ function run(argv) {
   }
 }
 
-module.exports = { run, parseFlags, printTableRows };
+module.exports = { run, parseFlags, printTableRows, buildVersionWarning, warnIfUnsupported };

@@ -116,11 +116,17 @@ function readChat(id) {
     }
   }
 
+  if (!yaml.cwd) {
+    throw new Error(
+      `Chat "${id}" has no working directory (cwd) recorded in its workspace.yaml and cannot be migrated. The target platform needs a cwd to place the migrated session.`
+    );
+  }
+
   return {
     sourcePlatform: 'copilot-cli',
     sourceChatId: id,
     title: yaml.name || '(untitled)',
-    cwd: yaml.cwd || '',
+    cwd: yaml.cwd,
     gitBranch: yaml.branch || undefined,
     model: model || undefined,
     createdAt: yaml.created_at || new Date(0).toISOString(),
