@@ -125,7 +125,9 @@ function readChat(id) {
     model: model || undefined,
     createdAt: yaml.created_at || new Date(0).toISOString(),
     updatedAt: yaml.updated_at || new Date(0).toISOString(),
-    turns: finishedTurns.filter((t) => t.text && t.text.trim().length > 0),
+    turns: finishedTurns.filter(
+      (t) => (t.text && t.text.trim().length > 0) || (t.toolNarrations && t.toolNarrations.length > 0)
+    ),
     _sessionFormatVersion: sessionFormatVersion,
   };
 }

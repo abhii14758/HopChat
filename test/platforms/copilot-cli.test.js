@@ -77,4 +77,60 @@ test('writeChat produces a chat that readChat can parse back with the same turns
   }
 });
 
+test('writeChat preserves the model field through a round trip', () => {
+  const ir = {
+    sourcePlatform: 'copilot-cli',
+    sourceChatId: 'orig-2',
+    title: 'Model round trip',
+    cwd: 'C:\\repo',
+    model: 'claude-opus-4.1',
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:01:00.000Z',
+    turns: [{ role: 'user', text: 'Hi' }],
+  };
+
+  let newChatId;
+  try {
+    withFakeHome(() => {
+      const result = writeChat(ir);
+      newChatId = result.newChatId;
+      const readBack = readChat(newChatId);
+      assert.equal(readBack.model, 'claude-opus-4.1');
+    });
+  } finally {
+    if (newChatId) {
+      fs.rmSync(path.join(FIXTURE_ROOT, '.copilot', 'session-state', newChatId), { recursive: true, force: true });
+    }
+  }
+});
+
+test('readChat keeps an assistant turn that has tool activity but no text', () => {
+  const events = [
+    { type: 'session.start', data: { sessionId: 'fixture-tool-only', version: 1 }, id: 'e1', timestamp: '2026-01-01T00:00:00.000Z', parentId: null },
+    { type: 'user.message', data: { content: 'Run a command' }, id: 'e2', timestamp: '2026-01-01T00:00:01.000Z', parentId: 'e1' },
+    { type: 'tool.execution_start', data: { toolCallId: 't1', toolName: 'bash', turnId: '0' }, id: 'e3', timestamp: '2026-01-01T00:00:02.000Z', parentId: 'e2' },
+    { type: 'tool.execution_complete', data: { toolCallId: 't1', success: true, turnId: '0' }, id: 'e4', timestamp: '2026-01-01T00:00:03.000Z', parentId: 'e3' },
+    { type: 'assistant.turn_end', data: { turnId: '0' }, id: 'e5', timestamp: '2026-01-01T00:00:04.000Z', parentId: 'e4' },
+  ];
+
+  const chatDir = path.join(FIXTURE_ROOT, '.copilot', 'session-state', 'fixture-tool-only');
+  try {
+    fs.mkdirSync(chatDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(chatDir, 'workspace.yaml'),
+      'id: fixture-tool-only\ncwd: C:\\repo\ncreated_at: 2026-01-01T00:00:00.000Z\nupdated_at: 2026-01-01T00:00:04.000Z\nname: Tool only\n'
+    );
+    fs.writeFileSync(path.join(chatDir, 'events.jsonl'), events.map((e) => JSON.stringify(e)).join('\n') + '\n');
+
+    withFakeHome(() => {
+      const ir = readChat('fixture-tool-only');
+      assert.equal(ir.turns.length, 2);
+      assert.equal(ir.turns[1].role, 'assistant');
+      assert.deepEqual(ir.turns[1].toolNarrations, ['Called bash', 'bash finished (ok)']);
+    });
+  } finally {
+    fs.rmSync(chatDir, { recursive: true, force: true });
+  }
+});
+
 module.exports = { withFakeHome, FIXTURE_ROOT };

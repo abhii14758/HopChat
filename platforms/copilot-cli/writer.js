@@ -79,6 +79,16 @@ function writeChat(ir) {
       },
     ];
 
+    if (ir.model) {
+      events.push({
+        type: 'session.model_change',
+        data: { newModel: ir.model },
+        id: crypto.randomUUID(),
+        timestamp: new Date().toISOString(),
+        parentId: null,
+      });
+    }
+
     let turnId = 0;
     for (const turn of ir.turns) {
       events.push(...turnToEvents(turn, turnId));
