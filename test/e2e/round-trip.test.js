@@ -27,10 +27,7 @@ test('round trip: copilot-cli -> claude-code -> copilot-cli keeps conversation c
   try {
     const toClaudeCode = migrate({ from: 'copilot-cli', to: 'claude-code', chatId: 'fixture-chat-001' });
     cleanupTasks.push(() =>
-      fs.rmSync(
-        path.join(FIXTURE_ROOT, '.claude', 'projects', claudeReader.sanitizeCwdToProjectDir('C:\\repo\\sample-project')),
-        { recursive: true, force: true }
-      )
+      fs.rmSync(path.join(FIXTURE_ROOT, '.claude'), { recursive: true, force: true })
     );
 
     const backToCopilot = migrate({ from: 'claude-code', to: 'copilot-cli', chatId: toClaudeCode.newChatId });
