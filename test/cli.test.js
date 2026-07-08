@@ -16,6 +16,16 @@ test('parseFlags handles no flags at all', () => {
   assert.deepEqual(positional, ['copilot-cli']);
 });
 
+function withTerminalWidth(columns, fn) {
+  const original = process.stdout.columns;
+  Object.defineProperty(process.stdout, 'columns', { value: columns, configurable: true });
+  try {
+    return fn();
+  } finally {
+    Object.defineProperty(process.stdout, 'columns', { value: original, configurable: true });
+  }
+}
+
 test('printTableRows renders a header, separator, and one line per row', () => {
   const lines = printTableRows([{ id: 'a1', title: 'Chat One' }], ['id', 'title']);
   assert.equal(lines.length, 3);
@@ -26,6 +36,32 @@ test('printTableRows renders a header, separator, and one line per row', () => {
 test('printTableRows returns a single line for an empty row set', () => {
   const lines = printTableRows([], ['id', 'title']);
   assert.deepEqual(lines, ['(no chats found)']);
+});
+
+test('printTableRows adapts flexible column width to a narrow terminal', () => {
+  const longTitle = 'A'.repeat(200);
+  withTerminalWidth(80, () => {
+    const lines = printTableRows([{ id: 'a1', title: longTitle }], ['id', 'title']);
+    for (const line of lines) {
+      assert.ok(line.length <= 80, `line exceeds terminal width: "${line}" (${line.length} chars)`);
+    }
+    assert.match(lines[2], /…/);
+  });
+});
+
+test('printTableRows gives flexible columns more room on a wide terminal', () => {
+  const title = 'A'.repeat(100);
+  withTerminalWidth(200, () => {
+    const lines = printTableRows([{ id: 'a1', title }], ['id', 'title']);
+    assert.ok(lines[2].includes(title), 'title should fit untruncated on a wide terminal');
+  });
+});
+
+test('printTableRows falls back to a default width when not a TTY (columns undefined)', () => {
+  withTerminalWidth(undefined, () => {
+    const lines = printTableRows([{ id: 'a1', title: 'Chat One' }], ['id', 'title']);
+    assert.match(lines[2], /a1\s+Chat One/);
+  });
 });
 
 const VERSIONS = { command: 'copilot', range: ['1.0.60', '1.0.70'] };
@@ -88,12 +124,41 @@ test('run sets exit code 1 and prints usage for an unknown command', () => {
   process.exitCode = undefined;
 });
 
-test('printTableRows truncates values longer than the column cap with an ellipsis', () => {
-  const longCwd = 'C:\\' + 'a'.repeat(80);
-  const lines = printTableRows([{ id: 'a1', cwd: longCwd }], ['id', 'cwd']);
-  const dataLine = lines[2];
-  assert.ok(!dataLine.includes(longCwd), 'the full untruncated path should not appear');
-  assert.match(dataLine, /…/);
+test('printTableRows truncates values longer than the available column width with an ellipsis', () => {
+  const longCwd = 'C:\\' + 'a'.repeat(200);
+  withTerminalWidth(80, () => {
+    const lines = printTableRows([{ id: 'a1', cwd: longCwd }], ['id', 'cwd']);
+    const dataLine = lines[2];
+    assert.ok(!dataLine.includes(longCwd), 'the full untruncated path should not appear');
+    assert.match(dataLine, /…/);
+  });
+});
+
+test('printTableRows never truncates id, even on a narrow terminal, since it must stay copy-pasteable', () => {
+  const realUuid = '01e0c97e-66dc-4869-9e6a-bf1e205ce6d2';
+  withTerminalWidth(60, () => {
+    const lines = printTableRows([{ id: realUuid, title: 'Something long here' }], ['id', 'title']);
+    assert.ok(lines[2].includes(realUuid), 'the full id must always be present, uncut, for copy-paste into migrate');
+  });
+});
+
+test('printTableRows caps updatedAt at its fixed width regardless of terminal size', () => {
+  const longUpdatedAt = 'x'.repeat(100);
+  withTerminalWidth(300, () => {
+    const lines = printTableRows([{ id: 'a1', updatedAt: longUpdatedAt }], ['id', 'updatedAt']);
+    assert.ok(!lines[2].includes(longUpdatedAt), 'updatedAt longer than its fixed cap should be truncated even on a wide terminal');
+  });
+});
+
+test('printTableRows keeps every line within the terminal width even when id + gutters barely fit', () => {
+  const realUuid = '01e0c97e-66dc-4869-9e6a-bf1e205ce6d2';
+  withTerminalWidth(45, () => {
+    const lines = printTableRows(
+      [{ id: realUuid, title: 'Some title', updatedAt: '2026-01-01T00:00:00.000Z', cwd: 'C:\\some\\long\\path' }],
+      ['id', 'title', 'updatedAt', 'cwd']
+    );
+    assert.ok(lines[2].includes(realUuid), 'id still uncut even in this extreme narrow case');
+  });
 });
 
 test('printTableRows leaves short values untouched', () => {

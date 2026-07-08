@@ -1,6 +1,6 @@
 {
   "name": "hopchat",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Migrate AI CLI chat sessions between tools (Copilot CLI, Claude Code, and more)",
   "bin": {
     "hopchat": "bin/hopchat.js"

@@ -62,11 +62,21 @@ function parseFlags(args) {
   return { flags, positional };
 }
 
-// Per-column max width so long titles/paths don't blow out the terminal and
-// wrap unpredictably. Values longer than the cap are truncated with an
-// ellipsis; terminal width itself is respected via a total-width fallback
-// when stdout isn't a TTY (e.g. piped output) or columns is unset.
-const COLUMN_MAX_WIDTH = { id: 36, title: 40, updatedAt: 24, cwd: 48 };
+// id and updatedAt are fixed-shape values (a UUID, an ISO timestamp). id in
+// particular must never be truncated -- the user copies it verbatim into
+// `hopchat migrate <chat-id>`, so a shortened id would be unusable. title and
+// cwd are free text and share whatever width is actually left after the
+// fixed columns and gutters, so the table adapts to the real terminal
+// instead of a hardcoded total that can overflow a narrow window.
+const FIXED_COLUMN_WIDTH = { updatedAt: 24 };
+const UNTRUNCATABLE_COLUMNS = new Set(['id']);
+const DEFAULT_TERMINAL_WIDTH = 120;
+const COLUMN_GUTTER = 2;
+
+function getTerminalWidth() {
+  const columns = process.stdout.columns;
+  return Number.isInteger(columns) && columns > 0 ? columns : DEFAULT_TERMINAL_WIDTH;
+}
 
 function truncate(value, max) {
   const str = String(value ?? '');
@@ -74,15 +84,48 @@ function truncate(value, max) {
   return str.slice(0, Math.max(0, max - 1)) + '…';
 }
 
+// Compute a display width per column so the table never exceeds terminalWidth
+// -- except when id + updatedAt + gutters alone already exceed it, an extreme
+// edge case (a terminal narrower than ~60 columns) where id's full UUID is
+// still protected from truncation since it must stay copy-pasteable.
+function computeColumnWidths(rows, columns, terminalWidth) {
+  const naturalWidth = (col) => Math.max(col.length, ...rows.map((row) => String(row[col] ?? '').length));
+
+  const unshrinkableCols = columns.filter((c) => UNTRUNCATABLE_COLUMNS.has(c) || FIXED_COLUMN_WIDTH[c] !== undefined);
+  const flexibleCols = columns.filter((c) => !unshrinkableCols.includes(c));
+
+  const unshrinkableWidths = {};
+  for (const col of unshrinkableCols) {
+    unshrinkableWidths[col] = UNTRUNCATABLE_COLUMNS.has(col)
+      ? naturalWidth(col)
+      : Math.min(FIXED_COLUMN_WIDTH[col], naturalWidth(col));
+  }
+
+  const gutterTotal = COLUMN_GUTTER * Math.max(columns.length - 1, 0);
+  const unshrinkableTotal = Object.values(unshrinkableWidths).reduce((a, b) => a + b, 0);
+  // Never inflate `remaining` above what's actually left -- doing so is what
+  // used to make the table wider than the real terminal on narrow windows.
+  const remaining = Math.max(terminalWidth - unshrinkableTotal - gutterTotal, flexibleCols.length);
+  const perFlexible = flexibleCols.length > 0 ? Math.floor(remaining / flexibleCols.length) : 0;
+
+  const widths = {};
+  for (const col of columns) {
+    widths[col] = unshrinkableCols.includes(col)
+      ? unshrinkableWidths[col]
+      : Math.max(1, Math.min(perFlexible, naturalWidth(col)));
+  }
+  return columns.map((c) => widths[c]);
+}
+
 function printTableRows(rows, columns) {
   if (rows.length === 0) return ['(no chats found)'];
-  const capFor = (col) => COLUMN_MAX_WIDTH[col] ?? 30;
-  const cells = rows.map((row) => columns.map((c) => truncate(row[c], capFor(c))));
-  const widths = columns.map((col, i) => Math.max(col.length, ...cells.map((row) => row[i].length)));
-  const formatRow = (values) => values.map((v, i) => String(v).padEnd(widths[i])).join('  ');
+  const widths = computeColumnWidths(rows, columns, getTerminalWidth());
+  const cells = rows.map((row) => columns.map((c, i) => truncate(row[c], widths[i])));
+  const displayWidths = columns.map((col, i) => Math.max(col.length, ...cells.map((row) => row[i].length)));
+  const formatRow = (values) => values.map((v, i) => String(v).padEnd(displayWidths[i])).join('  ');
   return [
     formatRow(columns),
-    widths.map((w) => '-'.repeat(w)).join('  '),
+    displayWidths.map((w) => '-'.repeat(w)).join('  '),
     ...cells.map((row) => formatRow(row)),
   ];
 }
