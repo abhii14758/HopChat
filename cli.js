@@ -1,10 +1,11 @@
 'use strict';
 
 const chalk = require('chalk');
-const cliProgress = require('cli-progress');
 const { registerPlatform, listPlatforms, getPlatform } = require('./core/registry');
-const { migrate, STAGES } = require('./core/migrate');
+const { migrate } = require('./core/migrate');
 const { checkCompatibility } = require('./core/version-check');
+const { animateHopBetween, printStaticMascot } = require('./cli-mascot');
+const { typewriteLine } = require('./cli-text-fx');
 
 registerPlatform('copilot-cli', {
   reader: require('./platforms/copilot-cli/reader'),
@@ -146,10 +147,9 @@ function cmdList(args) {
   }
 }
 
-// Playful per-stage labels shown as the progress bar advances. STAGES (from
-// core/migrate.js) is the source of truth for ordering/count; this just adds
-// the display text for each one. Kept separate from core so migrate() itself
-// never needs to know these strings exist.
+// Playful per-stage labels spoken by the mascot's speech bubble as it hops,
+// one per leg of the journey. Kept separate from core/migrate.js so
+// migrate() itself never needs to know these strings exist.
 const STAGE_LABELS = {
   reading: 'Reading chat from source...',
   validating: 'Double-checking nothing got lost in translation...',
@@ -168,17 +168,13 @@ function printMetadataPanel({ from, to, chatId, info }) {
   console.log('');
 }
 
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 // Local file migration finishes in milliseconds -- there's no real
-// byte-by-byte progress to show. Rather than flash the bar through 4 steps
-// in one tick, migrate() first runs to completion (capturing each stage's
-// metadata via onStage), then the CLI replays those stages with a small
-// delay each so the bar is actually visible and readable, not a blink.
+// byte-by-byte progress to show. migrate() first runs to completion
+// (capturing each stage's metadata via onStage), then the CLI replays those
+// stages as legs of the mascot's hop from source to target, each leg shown
+// for a moment so the animation is actually visible rather than a blink.
 // Tests set HOPCHAT_NO_ANIMATION=1 to skip the delay and run instantly.
-const STAGE_DISPLAY_DELAY_MS = process.env.HOPCHAT_NO_ANIMATION ? 0 : 300;
+const HOP_STEP_MS = process.env.HOPCHAT_NO_ANIMATION ? 0 : 90;
 
 async function cmdMigrate(args) {
   const { flags, positional } = parseFlags(args);
@@ -206,25 +202,16 @@ async function cmdMigrate(args) {
     printMetadataPanel({ from: flags.from, to: flags.to, chatId, info: readingEvent.info });
   }
 
-  const bar = new cliProgress.SingleBar(
-    {
-      format: `  ${chalk.cyan('{bar}')} {percentage}% | ${chalk.dim('{stageLabel}')}`,
-      barCompleteChar: '█',
-      barIncompleteChar: '░',
-      hideCursor: true,
-      clearOnComplete: false,
-    },
-    cliProgress.Presets.shades_classic
-  );
-  bar.start(STAGES.length, 0, { stageLabel: STAGE_LABELS[stageEvents[0]?.stage ?? 'reading'] });
+  await animateHopBetween({
+    fromLabel: chalk.bold(flags.from),
+    toLabel: chalk.bold(flags.to),
+    stages: stageEvents.map(({ stage }) => ({ bubbleLines: [STAGE_LABELS[stage]] })),
+    stepMs: HOP_STEP_MS,
+    happy: true,
+  });
 
-  for (const [index, { stage }] of stageEvents.entries()) {
-    await sleep(STAGE_DISPLAY_DELAY_MS);
-    bar.update(index + 1, { stageLabel: STAGE_LABELS[stage] });
-  }
-  bar.stop();
-
-  console.log(chalk.green(`\n✔ Migrated "${chatId}" from ${flags.from} to ${flags.to}.`));
+  console.log('');
+  await typewriteLine(chalk.green(`✔ Migrated "${chatId}" from ${flags.from} to ${flags.to}.`), { charDelayMs: 6 });
   console.log(`  ${chalk.dim('Resume with:')} ${chalk.bold(result.resumeCommand)}\n`);
 }
 
@@ -234,29 +221,31 @@ function cmdPlatforms() {
   }
 }
 
-const HELP_TEXT = `hopchat — migrate AI CLI chat sessions between tools
-
-Usage:
+const HELP_TEXT = `${chalk.bold('Usage:')}
   hopchat <command> [options]
 
-Commands:
-  list <platform>                          List chats found for a platform
-  migrate --from <platform> --to <platform> <chat-id>
+${chalk.bold('Commands:')}
+  ${chalk.cyan('list')} <platform>                          List chats found for a platform
+  ${chalk.cyan('migrate')} --from <platform> --to <platform> <chat-id>
                                             Migrate a chat from one platform to another
-  platforms                                List supported platform names
-  help, --help, -h                         Show this help
+  ${chalk.cyan('platforms')}                                List supported platform names
+  ${chalk.cyan('help')}, --help, -h                         Show this help
 
-Examples:
-  hopchat list copilot-cli
-  hopchat list claude-code
-  hopchat migrate --from copilot-cli --to claude-code 1d5a6952-f893-4173-8aaa-d51876acf5c0
-  hopchat platforms
+${chalk.bold('Examples:')}
+${chalk.dim('  hopchat list copilot-cli')}
+${chalk.dim('  hopchat list claude-code')}
+${chalk.dim('  hopchat migrate --from copilot-cli --to claude-code 1d5a6952-f893-4173-8aaa-d51876acf5c0')}
+${chalk.dim('  hopchat platforms')}
 
 After a successful migrate, run the printed resume command (e.g. "claude --resume <id>")
 in the target tool to continue the conversation.`;
 
-function cmdHelp() {
-  console.log(HELP_TEXT);
+async function cmdHelp() {
+  printStaticMascot([`${chalk.bold('hopchat')} ${chalk.dim('v0.2.0')}`, 'Migrate AI CLI chats between tools']);
+  console.log('');
+  for (const line of HELP_TEXT.split('\n')) {
+    await typewriteLine(line, { charDelayMs: line.trim() ? 4 : 0 });
+  }
 }
 
 const HELP_FLAGS = new Set(['help', '--help', '-h']);

@@ -24,7 +24,7 @@ hopchat migrate --from copilot-cli --to claude-code <chat-id>
 hopchat platforms
 ```
 
-A `migrate` shows the chat's metadata (title, turn count, model, project path) up front, a progress bar while the migration runs, then the resume command for the target tool (e.g. `claude --resume <new-id>`). Run that command and the target CLI loads the migrated chat as a normal, resumable session.
+A `migrate` shows the chat's metadata (title, turn count, model, project path) up front, then a hopping rabbit mascot travels from the source platform's name to the target's, its speech bubble narrating each stage as it goes. It lands with a happy face and the resume command for the target tool (e.g. `claude --resume <new-id>`). Run that command and the target CLI loads the migrated chat as a normal, resumable session.
 
 ### Fidelity
 
@@ -58,6 +58,8 @@ Tests run against fixture session files under `test/fixtures/` — no live CLI i
 ```
 hopchat/
 ├── cli.js                  # list / migrate / platforms commands
+├── cli-mascot.js           # hopping rabbit + speech bubble animation
+├── cli-text-fx.js          # typewriter text effect helper
 ├── core/
 │   ├── ir-schema.js        # canonical IR shape + validation
 │   ├── registry.js         # platform name -> {reader, writer}

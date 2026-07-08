@@ -99,15 +99,31 @@ test('buildVersionWarning returns null when no version descriptor is provided', 
 async function captureConsole(fn) {
   const originalLog = console.log;
   const originalError = console.error;
+  const originalWrite = process.stdout.write;
   const out = [];
   const err = [];
+  let writeBuffer = '';
   console.log = (...args) => out.push(args.join(' '));
   console.error = (...args) => err.push(args.join(' '));
+  // Some output (e.g. the typewriter effect in cli-text-fx.js) writes
+  // directly to process.stdout rather than through console.log, so it must
+  // be captured here too or it silently vanishes from `out`.
+  process.stdout.write = (chunk) => {
+    writeBuffer += chunk;
+    let newlineIndex;
+    while ((newlineIndex = writeBuffer.indexOf('\n')) !== -1) {
+      out.push(writeBuffer.slice(0, newlineIndex));
+      writeBuffer = writeBuffer.slice(newlineIndex + 1);
+    }
+    return true;
+  };
   try {
     await fn();
   } finally {
     console.log = originalLog;
     console.error = originalError;
+    process.stdout.write = originalWrite;
+    if (writeBuffer) out.push(writeBuffer);
   }
   return { out, err };
 }
