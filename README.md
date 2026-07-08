@@ -41,7 +41,7 @@ Both Copilot CLI and Claude Code store sessions as local files in undocumented f
 
 `hopchat` reads a source platform's session into a common intermediate representation (IR), then writes that IR into the target platform's own file format so its native resume command (`copilot --resume=<id>`, `claude --resume <id>`) picks it up. Each platform is an isolated reader/writer plugin behind a registry; adding a platform is one new folder, nothing in core changes.
 
-Because the formats are undocumented and can change between CLI releases, `hopchat` ships a per-platform version-compatibility range (see each platform's `supported-versions.js`) and warns if the installed CLI can't be verified against it.
+Because the formats are undocumented and can change between CLI releases, `hopchat` ships a per-platform version-compatibility range (see each platform's `supported-versions.js`) and warns if the installed CLI can't be verified against it. Some CLIs (Copilot CLI in particular) take a couple of seconds just to print their own `--version`, so the checked version is cached to disk for 24 hours — the first `migrate` after install or an upgrade pays that cost once, not on every run.
 
 ## Development
 

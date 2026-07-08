@@ -38,12 +38,12 @@ function buildVersionWarning(versions, compatResult) {
 
 // Impure: shells out to check the real installed CLI for `platform`, printing a
 // non-blocking warning to stderr if the version can't be confirmed. Never throws.
-function warnIfUnsupported(platform) {
+async function warnIfUnsupported(platform) {
   const versions = SUPPORTED_VERSIONS[platform];
   if (!versions) return; // platform ships no version descriptor; nothing to check
   let message;
   try {
-    message = buildVersionWarning(versions, checkCompatibility(versions.command, versions.range));
+    message = buildVersionWarning(versions, await checkCompatibility(versions.command, versions.range));
   } catch {
     return;
   }
@@ -184,8 +184,13 @@ async function cmdMigrate(args) {
     process.exitCode = 1;
     return;
   }
-  warnIfUnsupported(flags.from);
-  warnIfUnsupported(flags.to);
+  // Kick off both version checks concurrently rather than one after the
+  // other, and don't block migrate() on them -- they run in the background
+  // while the (fast, local, synchronous) migration itself proceeds. Only
+  // awaited right before printing, so a slow/hung CLI binary can add at
+  // most ~1 check's worth of latency instead of 2x that plus a delayed
+  // migration start.
+  const versionWarnings = Promise.all([warnIfUnsupported(flags.from), warnIfUnsupported(flags.to)]);
 
   const stageEvents = [];
   const result = migrate({
@@ -209,6 +214,13 @@ async function cmdMigrate(args) {
     stepMs: HOP_STEP_MS,
     happy: true,
   });
+
+  // By now the hop animation has taken at least a couple seconds in a real
+  // terminal, so the version checks kicked off above have almost always
+  // already settled -- this await is what makes any warning actually print
+  // (fire-and-forget above would let the process exit before it lands), not
+  // what causes the wait.
+  await versionWarnings;
 
   console.log('');
   await typewriteLine(chalk.green(`✔ Migrated "${chatId}" from ${flags.from} to ${flags.to}.`), { charDelayMs: 6 });
