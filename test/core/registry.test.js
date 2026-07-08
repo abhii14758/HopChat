@@ -39,3 +39,28 @@ test('registerPlatform rejects a reader missing readChat', () => {
     /must implement listChats\(\) and readChat\(\)/
   );
 });
+
+test('registerPlatform rejects a writer missing writeChat', () => {
+  assert.throws(
+    () => registerPlatform('bad', { reader: fakeReader(), writer: {} }),
+    /must implement writeChat\(\)/
+  );
+});
+
+test('registerPlatform rejects an empty or non-string name', () => {
+  assert.throws(
+    () => registerPlatform('', { reader: fakeReader(), writer: fakeWriter() }),
+    /Platform name must be a non-empty string/
+  );
+});
+
+test('getPlatform lists "(none)" when the registry is empty', () => {
+  assert.throws(() => getPlatform('anything'), /Registered platforms: \(none\)/);
+});
+
+test('clearRegistry removes all registered platforms', () => {
+  registerPlatform('a', { reader: fakeReader(), writer: fakeWriter() });
+  clearRegistry();
+  assert.deepEqual(listPlatforms(), []);
+  assert.throws(() => getPlatform('a'), /Unknown platform "a"/);
+});
