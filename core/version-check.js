@@ -4,7 +4,9 @@ const { execFileSync } = require('node:child_process');
 
 function getInstalledVersion(command, versionFlag = '--version') {
   try {
-    const output = execFileSync(command, [versionFlag], { encoding: 'utf8' });
+    // `command` must be a trusted, hardcoded value (never user input) — shell:true
+    // is required so npm-installed .cmd/.bat shims resolve correctly on Windows.
+    const output = execFileSync(command, [versionFlag], { encoding: 'utf8', shell: true });
     const match = output.match(/(\d+\.\d+\.\d+)/);
     return match ? match[1] : null;
   } catch {
