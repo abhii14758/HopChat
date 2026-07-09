@@ -128,13 +128,30 @@ async function captureConsole(fn) {
   return { out, err };
 }
 
-test('run prints help and exits 0 for --help, -h, help, and no command', async () => {
-  for (const argv of [['--help'], ['-h'], ['help'], []]) {
+test('run prints help and exits 0 for --help, -h, help', async () => {
+  for (const argv of [['--help'], ['-h'], ['help']]) {
     process.exitCode = undefined;
     const { out } = await captureConsole(() => run(argv));
     assert.match(out.join('\n'), /Usage:/);
     assert.match(out.join('\n'), /hopchat migrate --from/);
     assert.equal(process.exitCode, undefined);
+  }
+});
+
+test('run launches interactive mode for bare hopchat (no command), not the help screen', async () => {
+  // Ink renders directly to stdout via its own reconciler, bypassing
+  // console.log, so it can't be observed through this harness's
+  // console-capture. This test proves the right CODE PATH is taken
+  // (interactive command invoked, help not) via the test seam; full
+  // interactive behavior is covered by test/ink/App.test.js.
+  const cli = require('../cli');
+  let called = false;
+  const previous = cli.__test__setCmdInteractiveForTest(() => { called = true; return Promise.resolve(); });
+  try {
+    await run([]);
+    assert.equal(called, true);
+  } finally {
+    cli.__test__setCmdInteractiveForTest(previous);
   }
 });
 

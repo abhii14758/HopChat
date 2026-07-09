@@ -271,10 +271,32 @@ async function cmdHelp() {
 
 const HELP_FLAGS = new Set(['help', '--help', '-h']);
 
+// Lazily required so `ink`/`react` are only loaded when interactive mode
+// actually runs -- every other command (list/migrate/platforms/help) never
+// touches Ink at all, keeping their startup cost and behavior unchanged.
+let cmdInteractive = async () => {
+  const React = require('react');
+  const { render } = require('ink');
+  const App = require('./ink/App');
+  const instance = render(React.createElement(App));
+  await instance.waitUntilExit();
+};
+
+// Test seam: lets test/cli.test.js prove `run([])` takes the interactive code
+// path, without driving a real Ink render through this project's
+// console-capturing harness (Ink writes to stdout directly, bypassing
+// console.log).
+function __test__setCmdInteractiveForTest(fn) {
+  const previous = cmdInteractive;
+  cmdInteractive = fn;
+  return previous;
+}
+
 async function run(argv) {
   const [command, ...rest] = argv;
   try {
-    if (!command || HELP_FLAGS.has(command)) return cmdHelp();
+    if (!command) return cmdInteractive();
+    if (HELP_FLAGS.has(command)) return cmdHelp();
     if (command === 'list') return cmdList(rest);
     if (command === 'migrate') return await cmdMigrate(rest);
     if (command === 'platforms') return cmdPlatforms();
@@ -286,4 +308,4 @@ async function run(argv) {
   }
 }
 
-module.exports = { run, parseFlags, printTableRows, buildVersionWarning, warnIfUnsupported };
+module.exports = { run, parseFlags, printTableRows, buildVersionWarning, warnIfUnsupported, __test__setCmdInteractiveForTest };
