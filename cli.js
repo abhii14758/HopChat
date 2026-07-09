@@ -275,6 +275,16 @@ const HELP_FLAGS = new Set(['help', '--help', '-h']);
 // actually runs -- every other command (list/migrate/platforms/help) never
 // touches Ink at all, keeping their startup cost and behavior unchanged.
 let cmdInteractive = async () => {
+  // Ink's keyboard nav needs real terminal raw mode. Without it (piped
+  // output, non-interactive CI, `hopchat | less`, etc.) Ink throws its own
+  // low-level "Raw mode is not supported" error -- catch that case up front
+  // with a clear, actionable message instead of letting that crash surface.
+  if (!process.stdin.isTTY) {
+    console.error('Interactive mode needs a real terminal (no piped input/output detected).');
+    console.error('Try running `hopchat` directly in your terminal, or use `hopchat --help` for the flag-based commands.');
+    process.exitCode = 1;
+    return;
+  }
   const React = require('react');
   const { render } = require('ink');
   const App = require('./ink/App');

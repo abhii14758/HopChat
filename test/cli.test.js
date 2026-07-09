@@ -155,6 +155,20 @@ test('run launches interactive mode for bare hopchat (no command), not the help 
   }
 });
 
+test('run prints a clear error and sets exit code 1 when interactive mode is launched without a real TTY', async () => {
+  // This test suite itself runs under node --test with no real TTY attached
+  // (process.stdin.isTTY is undefined here), so calling the REAL
+  // cmdInteractive (not the swapped test-seam version) exercises the actual
+  // non-TTY guard added specifically because Ink's own raw-mode crash was
+  // reproduced and confirmed during this feature's manual verification step.
+  assert.equal(process.stdin.isTTY, undefined, 'this test only makes sense without a real TTY');
+  process.exitCode = undefined;
+  const { err } = await captureConsole(() => run([]));
+  assert.match(err.join('\n'), /needs a real terminal/);
+  assert.equal(process.exitCode, 1);
+  process.exitCode = undefined;
+});
+
 test('run sets exit code 1 and prints usage for an unknown command', async () => {
   process.exitCode = undefined;
   const { err } = await captureConsole(() => run(['bogus-command']));
