@@ -26,6 +26,16 @@ hopchat platforms
 
 A `migrate` shows the chat's metadata (title, turn count, model, project path) up front, then a hopping rabbit mascot travels from the source platform's name to the target's, its speech bubble narrating each stage as it goes. It lands with a happy face and the resume command for the target tool (e.g. `claude --resume <new-id>`). Run that command and the target CLI loads the migrated chat as a normal, resumable session.
 
+### Interactive mode
+
+Run `hopchat` with no arguments for a menu-driven flow instead of typing `--from`/`--to`/a chat id by hand:
+
+```bash
+hopchat
+```
+
+Greets you with a pixel-art banner, then walks through: pick a source platform → pick a destination → browse the source's chats (type to filter, arrow keys to scroll) → confirm → migrate. After a successful migration you're dropped back into the same chat list to pick another one — Esc or `q` exits at any point. `hopchat --help`, `hopchat list`, `hopchat migrate ...`, and `hopchat platforms` are unchanged and still work exactly as documented above.
+
 ### Fidelity
 
 Migration is **condensed fidelity**: user/assistant text is preserved exactly; tool calls (file edits, shell commands, sub-agent runs) are folded into the assistant's text as short narrations (e.g. `Called grep`) rather than replayed as structured tool calls.
@@ -57,9 +67,11 @@ Tests run against fixture session files under `test/fixtures/` — no live CLI i
 
 ```
 hopchat/
-├── cli.js                  # list / migrate / platforms commands
-├── cli-mascot.js           # hopping rabbit + speech bubble animation
+├── cli.js                  # list / migrate / platforms commands + interactive-mode launcher
+├── cli-mascot.js           # hopping rabbit + speech bubble animation (non-interactive migrate)
 ├── cli-text-fx.js          # typewriter text effect helper
+├── cli-pixel-art.js        # blocky pixel wordmark + mascot renderer (interactive mode)
+├── ink/                    # interactive-mode screens (Banner, MiniHeader, SelectList, ConfirmPrompt, SuccessPanel, App)
 ├── core/
 │   ├── ir-schema.js        # canonical IR shape + validation
 │   ├── registry.js         # platform name -> {reader, writer}
