@@ -206,6 +206,8 @@ test('cmdMigrate prints metadata (title, turn count, cwd) and the resume command
     assert.match(text, /Turns/);
     assert.match(text, /Resume with:/);
     assert.match(text, /claude --resume/);
+    assert.match(text, /cd into:/, 'should remind the user to cd into the project dir before resuming');
+    assert.match(text, /C:\\repo\\sample-project/, 'cd reminder should show the chat\'s actual project path');
 
     const match = text.match(/claude --resume ([0-9a-f-]{36})/);
     assert.ok(match, 'resume command should contain a session id');

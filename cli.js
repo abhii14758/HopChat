@@ -224,6 +224,15 @@ async function cmdMigrate(args) {
 
   console.log('');
   await typewriteLine(chalk.green(`✔ Migrated "${chatId}" from ${flags.from} to ${flags.to}.`), { charDelayMs: 6 });
+  // Claude Code's --resume only finds a session when run from that session's
+  // own project directory (a Claude Code constraint, not a hopchat one --
+  // verified against real, unmodified Claude Code sessions). Without this
+  // reminder the resume command silently fails with "No conversation found"
+  // if run from anywhere else, which reads as hopchat having produced a
+  // broken migration when the file itself is actually fine.
+  if (readingEvent?.info.cwd && flags.to === 'claude-code') {
+    console.log(`  ${chalk.dim('cd into:')}      ${chalk.bold(readingEvent.info.cwd)} ${chalk.dim('(Claude Code only resumes from the chat\'s own project directory)')}`);
+  }
   console.log(`  ${chalk.dim('Resume with:')} ${chalk.bold(result.resumeCommand)}\n`);
 }
 
