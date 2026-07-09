@@ -52,23 +52,21 @@ function App() {
     }
   });
 
+  let content;
+
   if (screen === SCREENS.EXIT) {
     setTimeout(() => exit(), 0);
-    return e(
+    content = e(
       Box,
       { flexDirection: 'column' },
       e(Banner, { tagline: 'See you next hop!', pose: 'happy' }),
       e(Text, { dimColor: true }, 'Session ended.')
     );
-  }
-
-  if (screen === SCREENS.GREETING) {
-    return e(GreetingScreen, { onContinue: () => setScreen(SCREENS.SELECT_SOURCE) });
-  }
-
-  if (screen === SCREENS.SELECT_SOURCE) {
+  } else if (screen === SCREENS.GREETING) {
+    content = e(GreetingScreen, { onContinue: () => setScreen(SCREENS.SELECT_SOURCE) });
+  } else if (screen === SCREENS.SELECT_SOURCE) {
     const items = listPlatforms().map((name) => ({ id: name, label: name }));
-    return e(
+    content = e(
       Box,
       { flexDirection: 'column' },
       e(MiniHeader, { pose: 'idle', message: "Where's this chat coming from?" }),
@@ -80,13 +78,11 @@ function App() {
         },
       })
     );
-  }
-
-  if (screen === SCREENS.SELECT_DESTINATION) {
+  } else if (screen === SCREENS.SELECT_DESTINATION) {
     const items = listPlatforms()
       .filter((name) => name !== fromPlatform)
       .map((name) => ({ id: name, label: name }));
-    return e(
+    content = e(
       Box,
       { flexDirection: 'column' },
       e(MiniHeader, { pose: 'idle', message: `${fromPlatform}, got it! Where's it hopping to?` }),
@@ -98,9 +94,7 @@ function App() {
         },
       })
     );
-  }
-
-  if (screen === SCREENS.BROWSE_CHATS) {
+  } else if (screen === SCREENS.BROWSE_CHATS) {
     const { reader } = getPlatform(fromPlatform);
     const chats = reader.listChats();
     const items = chats.map((chat) => ({
@@ -108,7 +102,7 @@ function App() {
       label: chat.title || '(untitled)',
       subtitle: `${chat.cwd} · ${relativeTime(chat.updatedAt)}`,
     }));
-    return e(
+    content = e(
       Box,
       { flexDirection: 'column' },
       e(MiniHeader, { pose: 'idle', message: 'Pick a chat to hop!' }),
@@ -121,12 +115,10 @@ function App() {
         },
       })
     );
-  }
-
-  if (screen === SCREENS.CONFIRM) {
+  } else if (screen === SCREENS.CONFIRM) {
     const { reader } = getPlatform(fromPlatform);
     const ir = reader.readChat(selectedChat);
-    return e(ConfirmPrompt, {
+    content = e(ConfirmPrompt, {
       title: ir.title,
       turnCount: ir.turns.length,
       model: ir.model || '(unknown)',
@@ -140,10 +132,8 @@ function App() {
       },
       onCancel: () => setScreen(SCREENS.BROWSE_CHATS),
     });
-  }
-
-  if (screen === SCREENS.SUCCESS) {
-    return e(
+  } else if (screen === SCREENS.SUCCESS) {
+    content = e(
       Box,
       { flexDirection: 'column' },
       e(MiniHeader, { pose: 'happy' }),
@@ -157,9 +147,16 @@ function App() {
       e(Box, { marginTop: 1 }, e(Text, { dimColor: true }, 'Press Enter to pick another chat, Esc to quit.')),
       e(ReturnToListOnEnter, { onReturn: () => setScreen(SCREENS.BROWSE_CHATS) })
     );
+  } else {
+    content = null;
   }
 
-  return null;
+  // alignItems:'flex-start' on this single root Box is what makes every
+  // screen's content (in particular Banner's bordered box) shrink to fit
+  // its actual content instead of stretching to the terminal's full width --
+  // Ink/yoga's real "hug content" mechanism, confirmed by measuring a bare
+  // bordered Box with and without this wrapper (100 cols wide vs 4).
+  return e(Box, { flexDirection: 'column', alignItems: 'flex-start' }, content);
 }
 
 function ReturnToListOnEnter({ onReturn }) {

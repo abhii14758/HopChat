@@ -20,15 +20,15 @@ function Banner({ tagline, pose, t = 0 }) {
     { flexDirection: 'column', borderStyle: 'round', borderColor: 'gray', paddingX: 2, paddingY: 1 },
     e(
       Box,
-      { flexDirection: 'row', justifyContent: 'space-between' },
+      { flexDirection: 'row' },
       e(
         Box,
-        { flexDirection: 'column', flexGrow: 1 },
+        { flexDirection: 'column' },
         ...wordmarkLines.map((line, i) => e(Text, { key: `wm-${i}` }, line))
       ),
       e(
         Box,
-        { flexDirection: 'column', marginLeft: 2 },
+        { flexDirection: 'column', marginLeft: 3 },
         ...mascotLines.map((line, i) => e(Text, { key: `m-${i}` }, line))
       )
     ),
