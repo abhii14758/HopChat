@@ -1,0 +1,23 @@
+{
+  "id": "fixture-chat-001",
+  "title": "Sample Fixture Chat",
+  "createdAt": "2026-01-01T00:00:00.000Z",
+  "updatedAt": "2026-01-01T00:01:00.000Z",
+  "cwd": "C:\\repo",
+  "gitBranch": "main",
+  "model": "claude-sonnet-4.6",
+  "messages": [
+    {
+      "role": "user",
+      "content": "List files in src/",
+      "toolCalls": []
+    },
+    {
+      "role": "assistant",
+      "content": "I found 3 files: index.js, app.js, utils.js.",
+      "toolCalls": [
+        { "name": "glob", "status": "completed" }
+      ]
+    }
+  ]
+}

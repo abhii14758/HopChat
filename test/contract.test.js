@@ -9,9 +9,12 @@ const copilotReader = require('../platforms/copilot-cli/reader');
 const copilotWriter = require('../platforms/copilot-cli/writer');
 const claudeReader = require('../platforms/claude-code/reader');
 const claudeWriter = require('../platforms/claude-code/writer');
+const cursorReader = require('../platforms/cursor-cli/reader');
+const cursorWriter = require('../platforms/cursor-cli/writer');
 
 const COPILOT_FIXTURE_ROOT = path.join(__dirname, 'fixtures', 'copilot-cli');
 const CLAUDE_FIXTURE_ROOT = path.join(__dirname, 'fixtures', 'claude-code');
+const CURSOR_FIXTURE_ROOT = path.join(__dirname, 'fixtures', 'cursor-cli');
 
 function sampleIR(sourcePlatform, cwd) {
   return {
@@ -60,6 +63,26 @@ test('claude-code platform contract', async (t) => {
       cleanupWrite: () =>
         fs.rmSync(path.join(CLAUDE_FIXTURE_ROOT, '.claude', 'projects', claudeReader.sanitizeCwdToProjectDir(cwd)), {
           recursive: true,
+          force: true,
+        }),
+    });
+  } finally {
+    os.homedir = original;
+  }
+});
+
+test('cursor-cli platform contract', async (t) => {
+  const original = os.homedir;
+  os.homedir = () => CURSOR_FIXTURE_ROOT;
+  try {
+    await runContractTests(t, {
+      name: 'cursor-cli',
+      reader: cursorReader,
+      writer: cursorWriter,
+      existingChatId: 'fixture-chat-001',
+      sampleIRForWrite: sampleIR('cursor-cli', 'C:\\repo\\contract-test'),
+      cleanupWrite: (result) =>
+        fs.rmSync(path.join(CURSOR_FIXTURE_ROOT, '.cursor', 'chats', `${result.newChatId}.json`), {
           force: true,
         }),
     });

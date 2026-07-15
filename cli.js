@@ -18,6 +18,11 @@ registerPlatform('claude-code', {
   writer: require('./platforms/claude-code/writer'),
   supportedVersions: require('./platforms/claude-code/supported-versions'),
 });
+registerPlatform('cursor-cli', {
+  reader: require('./platforms/cursor-cli/reader'),
+  writer: require('./platforms/cursor-cli/writer'),
+  supportedVersions: require('./platforms/cursor-cli/supported-versions'),
+});
 
 // Human-readable display names + version-check command, used by `hopchat
 // platforms` and by warnIfUnsupported. Kept here (not on the registry entry)
@@ -25,6 +30,7 @@ registerPlatform('claude-code', {
 const DISPLAY_NAMES = {
   'copilot-cli': 'GitHub Copilot CLI',
   'claude-code': 'Claude Code',
+  'cursor-cli': 'Cursor CLI',
 };
 
 // Pure: given a platform's supported-versions descriptor and a checkCompatibility

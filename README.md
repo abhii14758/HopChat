@@ -14,6 +14,7 @@ copy-paste. Start a task in one CLI, continue it natively in another.
 
 - GitHub Copilot CLI
 - Claude Code
+- Cursor CLI
 
 Both directions. More platforms can be added by dropping a `reader.js`/`writer.js` pair into `platforms/` (see `platforms/TEMPLATE/` and [CONTRIBUTING.md](CONTRIBUTING.md#adding-a-new-platform) for the full checklist — this is the contribution hopchat most wants).
 
