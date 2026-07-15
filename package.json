@@ -55,5 +55,8 @@
   "devDependencies": {
     "@changesets/cli": "^2.31.0",
     "ink-testing-library": "^2.1.0"
+  },
+  "overrides": {
+    "@types/node": "^22.0.0"
   }
 }
