@@ -28,6 +28,15 @@ function isToolResultOnly(content) {
   return Array.isArray(content) && content.length > 0 && content.every((block) => block && block.type === 'tool_result');
 }
 
+// See platforms/copilot-cli/reader.js's assertSafeChatId for why this exists:
+// a crafted sessionId containing ".." or a path separator would otherwise
+// let path.join in findSessionFile() escape ~/.claude/projects/ entirely.
+function assertSafeChatId(id) {
+  if (typeof id !== 'string' || id.length === 0 || /[\\/]/.test(id) || id.includes('..')) {
+    throw new Error(`Invalid chat id "${id}"`);
+  }
+}
+
 function findSessionFile(sessionId) {
   const root = projectsRoot();
   if (!fs.existsSync(root)) return null;
@@ -120,6 +129,7 @@ function listChats() {
 }
 
 function readChat(sessionId) {
+  assertSafeChatId(sessionId);
   const filePath = findSessionFile(sessionId);
   if (!filePath) {
     throw new Error(`No Claude Code chat found with session id "${sessionId}" under ${projectsRoot()}`);
@@ -137,4 +147,4 @@ function sanitizeCwdToProjectDir(cwd) {
   return cwd.replace(/[^a-zA-Z0-9]/g, '-');
 }
 
-module.exports = { listChats, readChat, projectsRoot, sanitizeCwdToProjectDir, parseSessionFile };
+module.exports = { listChats, readChat, projectsRoot, sanitizeCwdToProjectDir, parseSessionFile, assertSafeChatId };

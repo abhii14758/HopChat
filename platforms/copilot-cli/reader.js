@@ -8,6 +8,19 @@ function sessionRoot() {
   return path.join(os.homedir(), '.copilot', 'session-state');
 }
 
+// `id` reaches here as a raw, untrusted string -- typed by hand on
+// `hopchat migrate <chat-id>`, or read from an untrusted source in future
+// callers. Rejecting path separators and ".." before it's ever joined into a
+// filesystem path closes off reading arbitrary files elsewhere on disk via a
+// crafted id (e.g. "../../../../some/other/dir"). Real ids -- both this
+// platform's own directory names and the UUIDs hopchat's own writer mints --
+// never contain these characters, so this never rejects a legitimate id.
+function assertSafeChatId(id) {
+  if (typeof id !== 'string' || id.length === 0 || /[\\/]/.test(id) || id.includes('..')) {
+    throw new Error(`Invalid chat id "${id}"`);
+  }
+}
+
 function parseWorkspaceYaml(content) {
   const result = {};
   for (const line of content.split(/\r?\n/)) {
@@ -53,6 +66,7 @@ function listChats() {
 }
 
 function readChat(id) {
+  assertSafeChatId(id);
   const chatDir = path.join(sessionRoot(), id);
   const workspacePath = path.join(chatDir, 'workspace.yaml');
   const eventsPath = path.join(chatDir, 'events.jsonl');
@@ -80,7 +94,16 @@ function readChat(id) {
   }
 
   for (const line of lines) {
-    const event = JSON.parse(line);
+    let event;
+    try {
+      event = JSON.parse(line);
+    } catch {
+      // A single malformed/truncated line shouldn't take down the whole
+      // parse -- matches claude-code's reader, which already skips bad
+      // lines the same way. Real files can pick up a stray partial line if
+      // the source CLI is killed mid-write.
+      continue;
+    }
 
     if (event.type === 'session.start') {
       sessionFormatVersion = event.data.version;
@@ -148,4 +171,4 @@ function readChat(id) {
   };
 }
 
-module.exports = { listChats, readChat, sessionRoot, parseWorkspaceYaml };
+module.exports = { listChats, readChat, sessionRoot, parseWorkspaceYaml, assertSafeChatId };
