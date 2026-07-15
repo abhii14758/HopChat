@@ -64,7 +64,15 @@ const MASCOT_ICON_BASE = [
 const MASCOT_COLORS = {
   F: chalk.hex('#e8b878'),
   E: chalk.hex('#f7d9a8'),
-  K: chalk.hex('#3a2a20'),
+  // Lightened from a near-black #3a2a20: against a dark-themed terminal
+  // background (the common default), a near-black eye/mouth color has almost
+  // no contrast against a dark pane and effectively disappears -- including
+  // during the blink animation this same pixel is used to drive, which
+  // depends on the eye being visibly distinct from its surroundings to read
+  // as "closed" versus "open". #7a4a2e keeps the same brown family (reads as
+  // "the darkest part of the face" against the lighter fur tones above) while
+  // staying visible on both light and dark terminal backgrounds.
+  K: chalk.hex('#7a4a2e'),
   A: chalk.cyan,
 };
 const MASCOT_HAPPY_ACCENT = chalk.hex('#8af0e6');

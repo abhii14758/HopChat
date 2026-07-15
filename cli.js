@@ -1,6 +1,7 @@
 'use strict';
 
 const chalk = require('chalk');
+const packageJson = require('./package.json');
 const { registerPlatform, listPlatforms, getPlatform } = require('./core/registry');
 const { migrate } = require('./core/migrate');
 const { checkCompatibility } = require('./core/version-check');
@@ -10,15 +11,20 @@ const { typewriteLine } = require('./cli-text-fx');
 registerPlatform('copilot-cli', {
   reader: require('./platforms/copilot-cli/reader'),
   writer: require('./platforms/copilot-cli/writer'),
+  supportedVersions: require('./platforms/copilot-cli/supported-versions'),
 });
 registerPlatform('claude-code', {
   reader: require('./platforms/claude-code/reader'),
   writer: require('./platforms/claude-code/writer'),
+  supportedVersions: require('./platforms/claude-code/supported-versions'),
 });
 
-const SUPPORTED_VERSIONS = {
-  'copilot-cli': require('./platforms/copilot-cli/supported-versions'),
-  'claude-code': require('./platforms/claude-code/supported-versions'),
+// Human-readable display names + version-check command, used by `hopchat
+// platforms` and by warnIfUnsupported. Kept here (not on the registry entry)
+// since it's presentation, not part of the reader/writer contract.
+const DISPLAY_NAMES = {
+  'copilot-cli': 'GitHub Copilot CLI',
+  'claude-code': 'Claude Code',
 };
 
 // Pure: given a platform's supported-versions descriptor and a checkCompatibility
@@ -36,19 +42,33 @@ function buildVersionWarning(versions, compatResult) {
   return null;
 }
 
-// Impure: shells out to check the real installed CLI for `platform`, printing a
-// non-blocking warning to stderr if the version can't be confirmed. Never throws.
+// Impure: shells out to check the real installed CLI for `platform`. Returns
+// the warning string (or null when there's nothing to warn about, including
+// an unregistered platform or one with no version descriptor) rather than
+// printing it directly -- printing is the caller's job, since the CLI wants
+// it on stderr via console.error and the interactive TUI wants the same
+// string without fighting Ink's own stdout rendering. Never throws.
 async function warnIfUnsupported(platform) {
-  const versions = SUPPORTED_VERSIONS[platform];
-  if (!versions) return; // platform ships no version descriptor; nothing to check
-  let message;
+  let versions;
   try {
-    message = buildVersionWarning(versions, await checkCompatibility(versions.command, versions.range));
+    versions = getPlatform(platform).supportedVersions;
   } catch {
-    return;
+    return null; // unregistered platform -- nothing to check
   }
-  if (message) console.error(message);
+  if (!versions) return null;
+  try {
+    return buildVersionWarning(versions, await checkCompatibility(versions.command, versions.range));
+  } catch {
+    return null;
+  }
 }
+
+// Flags that are booleans (their presence is the whole value) rather than
+// `--key value` pairs. Without this, `--no-color` would swallow the very
+// next argv token as its "value" -- e.g. `migrate ... --no-color <chat-id>`
+// would eat the chat id itself, leaving `migrate` with no positional
+// argument and failing with a usage error that doesn't explain why.
+const BOOLEAN_FLAGS = new Set(['no-color']);
 
 function parseFlags(args) {
   const flags = {};
@@ -56,8 +76,13 @@ function parseFlags(args) {
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
     if (arg.startsWith('--')) {
-      flags[arg.slice(2)] = args[i + 1];
-      i += 1;
+      const name = arg.slice(2);
+      if (BOOLEAN_FLAGS.has(name)) {
+        flags[name] = true;
+      } else {
+        flags[name] = args[i + 1];
+        i += 1;
+      }
     } else {
       positional.push(arg);
     }
@@ -220,7 +245,9 @@ async function cmdMigrate(args) {
   // already settled -- this await is what makes any warning actually print
   // (fire-and-forget above would let the process exit before it lands), not
   // what causes the wait.
-  await versionWarnings;
+  for (const warning of (await versionWarnings).filter(Boolean)) {
+    console.error(warning);
+  }
 
   console.log('');
   await typewriteLine(chalk.green(`✔ Migrated "${chatId}" from ${flags.from} to ${flags.to}.`), { charDelayMs: 6 });
@@ -236,14 +263,35 @@ async function cmdMigrate(args) {
   console.log(`  ${chalk.dim('Resume with:')} ${chalk.bold(result.resumeCommand)}\n`);
 }
 
+// Full display name + how many chats are sitting locally right now, so
+// `hopchat platforms` actually answers "what's supported" instead of
+// printing two bare identifier strings a first-time user has to go read the
+// README to make sense of. listChats() failures (platform not installed,
+// unreadable session dir) are swallowed to "?" rather than crashing the
+// whole command over one platform's local state.
 function cmdPlatforms() {
   for (const name of listPlatforms()) {
-    console.log(name);
+    const { reader } = getPlatform(name);
+    let chatCount = '?';
+    try {
+      chatCount = String(reader.listChats().length);
+    } catch {
+      // leave as '?' -- a platform with no local install/session dir yet
+      // shouldn't make the whole `platforms` command fail.
+    }
+    const displayName = DISPLAY_NAMES[name] || name;
+    console.log(`${chalk.cyan(name.padEnd(14))} ${displayName}  ${chalk.dim(`(${chatCount} local chats)`)}`);
   }
 }
 
-const HELP_TEXT = `${chalk.bold('Usage:')}
+// A function, not a frozen const: HELP_TEXT is rebuilt on every cmdHelp()
+// call so it picks up chalk.level changes made by run()'s NO_COLOR/--no-color
+// handling (see run() below) -- a module-level const would have its color
+// codes (or lack of them) baked in permanently at require time instead.
+function helpText() {
+  return `${chalk.bold('Usage:')}
   hopchat <command> [options]
+  hopchat                                    Launch interactive mode (menu-driven, no flags needed)
 
 ${chalk.bold('Commands:')}
   ${chalk.cyan('list')} <platform>                          List chats found for a platform
@@ -251,8 +299,10 @@ ${chalk.bold('Commands:')}
                                             Migrate a chat from one platform to another
   ${chalk.cyan('platforms')}                                List supported platform names
   ${chalk.cyan('help')}, --help, -h                         Show this help
+  ${chalk.cyan('--version')}, -v                             Show the installed hopchat version
 
 ${chalk.bold('Examples:')}
+${chalk.dim('  hopchat')}
 ${chalk.dim('  hopchat list copilot-cli')}
 ${chalk.dim('  hopchat list claude-code')}
 ${chalk.dim('  hopchat migrate --from copilot-cli --to claude-code 1d5a6952-f893-4173-8aaa-d51876acf5c0')}
@@ -260,16 +310,27 @@ ${chalk.dim('  hopchat platforms')}
 
 After a successful migrate, run the printed resume command (e.g. "claude --resume <id>")
 in the target tool to continue the conversation.`;
+}
+
+// Reference the same const the package publishes, rather than a hand-typed
+// literal, so this can never drift out of sync with an actual release the
+// way the old hardcoded "v0.2.0" string did against a real 0.4.0 package.
+const HELP_CHAR_DELAY_MS = process.env.HOPCHAT_NO_ANIMATION ? 0 : 4;
 
 async function cmdHelp() {
-  printStaticMascot([`${chalk.bold('hopchat')} ${chalk.dim('v0.2.0')}`, 'Migrate AI CLI chats between tools']);
+  printStaticMascot([`${chalk.bold('hopchat')} ${chalk.dim(`v${packageJson.version}`)}`, 'Migrate AI CLI chats between tools']);
   console.log('');
-  for (const line of HELP_TEXT.split('\n')) {
-    await typewriteLine(line, { charDelayMs: line.trim() ? 4 : 0 });
+  for (const line of helpText().split('\n')) {
+    await typewriteLine(line, { charDelayMs: line.trim() ? HELP_CHAR_DELAY_MS : 0 });
   }
 }
 
+function cmdVersion() {
+  console.log(`hopchat v${packageJson.version}`);
+}
+
 const HELP_FLAGS = new Set(['help', '--help', '-h']);
+const VERSION_FLAGS = new Set(['version', '--version', '-v']);
 
 // Lazily required so `ink`/`react` are only loaded when interactive mode
 // actually runs -- every other command (list/migrate/platforms/help) never
@@ -303,10 +364,25 @@ function __test__setCmdInteractiveForTest(fn) {
 }
 
 async function run(argv) {
+  // NO_COLOR (https://no-color.org): chalk@4's own supports-color check
+  // never looks at this env var (that landed only in chalk@5, which is
+  // ESM-only and incompatible with this project's deliberate CommonJS/Ink-3
+  // pin -- see README's Development section), so it's checked explicitly
+  // here. `--no-color` as a bare CLI flag is scanned directly out of argv
+  // (not via parseFlags, which is per-command and runs later) so it affects
+  // every command uniformly, including help text built via helpText().
+  // Checked fresh on every run() call, not once at module load, so this
+  // reacts correctly across repeated calls in the same process (tests) as
+  // well as a single real invocation.
+  if (process.env.NO_COLOR || argv.includes('--no-color')) {
+    chalk.level = 0;
+  }
+
   const [command, ...rest] = argv;
   try {
     if (!command) return cmdInteractive();
     if (HELP_FLAGS.has(command)) return cmdHelp();
+    if (VERSION_FLAGS.has(command)) return cmdVersion();
     if (command === 'list') return cmdList(rest);
     if (command === 'migrate') return await cmdMigrate(rest);
     if (command === 'platforms') return cmdPlatforms();

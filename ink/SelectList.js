@@ -14,7 +14,11 @@ const VISIBLE_ROWS = 6;
 //   filter (matched against label), arrows navigate filtered results, window
 //   scrolls once filtered list exceeds VISIBLE_ROWS.
 // Each item is { id, label, subtitle? }; onSelect(item) fires on Enter.
-function SelectList({ items, onSelect, filterable = false }) {
+// `emptyLabel` is shown when `items` itself is empty (e.g. no local chats
+// found for this platform at all) -- kept distinct from the "(no matches)"
+// text shown when a filter query matches nothing, so a genuinely empty list
+// doesn't read as a failed search.
+function SelectList({ items, onSelect, filterable = false, emptyLabel = '(no matches)' }) {
   const [query, setQuery] = useState('');
   const [highlighted, setHighlighted] = useState(0);
 
@@ -51,9 +55,14 @@ function SelectList({ items, onSelect, filterable = false }) {
     filterable
       ? e(Text, null, e(Text, { bold: true }, '> '), query, e(Text, { dimColor: true }, '_'))
       : null,
-    filterable && moreAbove > 0 ? e(Text, { dimColor: true }, `▲ ${moreAbove} more above`) : null,
+    // Scroll indicators are keyed off whether there's actually more content
+    // off-screen (items.length > VISIBLE_ROWS), not off `filterable` -- the
+    // old `filterable &&` gate meant a long non-filterable list (e.g. a
+    // future 3rd+ platform in the source/destination picker) would silently
+    // hide extra choices with no indication they existed.
+    items.length > VISIBLE_ROWS && moreAbove > 0 ? e(Text, { dimColor: true }, `▲ ${moreAbove} more above`) : null,
     filtered.length === 0
-      ? e(Text, { dimColor: true }, '(no matches)')
+      ? e(Text, { dimColor: true }, query ? '(no matches)' : emptyLabel)
       : visible.map((item, i) => {
           const absoluteIndex = windowStart + i;
           const isSelected = absoluteIndex === clampedHighlight;
@@ -69,7 +78,7 @@ function SelectList({ items, onSelect, filterable = false }) {
             item.subtitle ? e(Text, { dimColor: true }, '    ', item.subtitle) : null
           );
         }),
-    filterable && moreBelow > 0 ? e(Text, { dimColor: true }, `▼ ${moreBelow} more below`) : null
+    items.length > VISIBLE_ROWS && moreBelow > 0 ? e(Text, { dimColor: true }, `▼ ${moreBelow} more below`) : null
   );
 }
 
