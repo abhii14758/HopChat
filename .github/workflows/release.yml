@@ -27,6 +27,10 @@ jobs:
         with:
           node-version: 22.x
           cache: npm
+      # npm's OIDC trusted publishing needs npm >=11.5.1; Node 22.x currently
+      # bundles 10.9.x, which silently ignores the OIDC token and fails the
+      # publish step with ENEEDAUTH instead of using it.
+      - run: npm install -g npm@latest
       - run: npm ci
       - run: npm test
       - uses: changesets/action@v1
