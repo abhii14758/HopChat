@@ -182,7 +182,8 @@ test('a reader failure while browsing chats shows a styled error screen instead 
   const { lastFrame, stdin } = render(e(App));
   await tick(); stdin.write('\r'); await tick(); // greeting -> select source
   stdin.write('\r'); await tick(); // select copilot-cli -> select destination
-  stdin.write('\r'); await tick(); // select claude-code -> browse chats (reader throws here)
+  stdin.write('\r'); // select claude-code -> browse chats (reader throws here)
+  await waitForFrame(() => strip(lastFrame()), /Something went wrong/i);
   const frame = strip(lastFrame());
   assert.match(frame, /Something went wrong/i);
   assert.match(frame, /permission denied reading session directory/);
