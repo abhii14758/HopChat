@@ -1,0 +1,64 @@
+name: Bug report
+description: Something didn't work the way it should.
+labels: [bug]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you expect to happen instead?
+    validations:
+      required: true
+  - type: input
+    id: hopchat-version
+    attributes:
+      label: hopchat version
+      description: Output of `hopchat --version`
+    validations:
+      required: true
+  - type: dropdown
+    id: command
+    attributes:
+      label: Which command were you running?
+      options:
+        - migrate (interactive mode, bare `hopchat`)
+        - migrate (flag-based, `hopchat migrate --from ... --to ...`)
+        - list
+        - platforms
+        - other / not sure
+    validations:
+      required: true
+  - type: dropdown
+    id: platforms
+    attributes:
+      label: Which platform(s) are involved?
+      multiple: true
+      options:
+        - GitHub Copilot CLI
+        - Claude Code
+    validations:
+      required: false
+  - type: input
+    id: platform-version
+    attributes:
+      label: Installed version of the source/target CLI(s)
+      description: Output of `copilot --version` and/or `claude --version` — this matters a lot here, since hopchat's readers/writers are reverse-engineered against undocumented, versioned session formats. A version-mismatch is one of the most likely root causes for a parsing bug.
+    validations:
+      required: false
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Windows
+        - macOS
+        - Linux
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Error output
+      description: Full error text/stack trace if any. hopchat reads real chat session files — please redact anything from the chat content itself you don't want to share.
+      render: shell

@@ -2,6 +2,25 @@
   "name": "hopchat",
   "version": "0.4.0",
   "description": "Migrate AI CLI chat sessions between tools (Copilot CLI, Claude Code, and more)",
+  "keywords": [
+    "cli",
+    "ai",
+    "claude-code",
+    "github-copilot-cli",
+    "chat-migration",
+    "session-migration",
+    "llm-tools",
+    "developer-tools"
+  ],
+  "homepage": "https://github.com/abhii14758/HopChat#readme",
+  "bugs": {
+    "url": "https://github.com/abhii14758/HopChat/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/abhii14758/HopChat.git"
+  },
+  "author": "Abhi Bhimani",
   "bin": {
     "hopchat": "bin/hopchat.js"
   },
@@ -10,7 +29,10 @@
     "node": ">=18"
   },
   "scripts": {
-    "test": "node --test"
+    "test": "node --test",
+    "changeset": "changeset",
+    "version": "changeset version",
+    "release": "changeset publish"
   },
   "license": "MIT",
   "files": [
@@ -22,7 +44,8 @@
     "ink",
     "core",
     "platforms",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "dependencies": {
     "chalk": "^4.1.2",
@@ -30,6 +53,7 @@
     "react": "^17.0.2"
   },
   "devDependencies": {
+    "@changesets/cli": "^2.31.0",
     "ink-testing-library": "^2.1.0"
   }
 }

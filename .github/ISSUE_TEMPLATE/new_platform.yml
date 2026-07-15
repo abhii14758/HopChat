@@ -1,0 +1,33 @@
+name: Add platform support
+description: Request (or volunteer to build) support for another AI CLI tool.
+labels: [new-platform, help wanted]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Adding a platform to hopchat is a self-contained, mechanical task: copy
+        `platforms/TEMPLATE/`, implement a reader and writer against the tool's real
+        session format, and pass the shared contract test suite. See
+        [CONTRIBUTING.md](https://github.com/abhii14758/HopChat/blob/main/CONTRIBUTING.md#adding-a-new-platform)
+        for the full checklist — this is hopchat's flagship "good first issue" shape.
+  - type: input
+    id: tool-name
+    attributes:
+      label: Which CLI tool?
+      description: e.g. Cursor CLI, Aider, OpenAI Codex CLI, Gemini CLI, OpenCode
+    validations:
+      required: true
+  - type: textarea
+    id: session-format
+    attributes:
+      label: Do you know where/how this tool stores chat sessions locally?
+      description: A file path and a sample of the format (redacted of real content) is the single most useful thing you can provide — it's the hard part of adding a new platform. If you don't know, that's fine, leave this blank and someone can investigate.
+    validations:
+      required: false
+  - type: checkboxes
+    id: volunteering
+    attributes:
+      label: Would you like to build this yourself?
+      options:
+        - label: I'd like to implement this — see CONTRIBUTING.md's "Adding a new platform" checklist
+          required: false

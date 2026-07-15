@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      # Don't cancel the other matrix legs the moment one fails. hopchat's
+      # core job is reading/writing two other CLIs' real session storage
+      # paths, where home-directory resolution and path separators genuinely
+      # differ between Windows and POSIX -- the failure class this project is
+      # most exposed to is "works on Linux/macOS, breaks on Windows" (or vice
+      # versa), and fail-fast would cancel or hide exactly that signal.
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        node-version: [18.x, 20.x, 22.x]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+      - run: npm ci
+      - run: npm test
