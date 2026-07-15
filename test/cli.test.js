@@ -8,6 +8,7 @@ const path = require('node:path');
 const os = require('node:os');
 const fs = require('node:fs');
 const { parseFlags, printTableRows, buildVersionWarning, run } = require('../cli');
+const packageJson = require('../package.json');
 const claudeReader = require('../platforms/claude-code/reader');
 
 test('parseFlags splits --key value pairs from positional args', () => {
@@ -20,6 +21,16 @@ test('parseFlags handles no flags at all', () => {
   const { flags, positional } = parseFlags(['copilot-cli']);
   assert.deepEqual(flags, {});
   assert.deepEqual(positional, ['copilot-cli']);
+});
+
+test('parseFlags treats --no-color as a boolean flag, not a value-consuming one', () => {
+  // Regression test: --no-color used to be treated like every other --key,
+  // consuming the very next argv token as its "value" -- so
+  // `migrate --from a --to b --no-color <chat-id>` silently ate the chat id,
+  // leaving migrate with no positional argument at all.
+  const { flags, positional } = parseFlags(['--from', 'copilot-cli', '--to', 'claude-code', '--no-color', 'abc-123']);
+  assert.deepEqual(flags, { from: 'copilot-cli', to: 'claude-code', 'no-color': true });
+  assert.deepEqual(positional, ['abc-123']);
 });
 
 function withTerminalWidth(columns, fn) {
@@ -173,6 +184,74 @@ test('run sets exit code 1 and prints usage for an unknown command', async () =>
   process.exitCode = undefined;
   const { err } = await captureConsole(() => run(['bogus-command']));
   assert.match(err.join('\n'), /Unknown command "bogus-command"/);
+  assert.equal(process.exitCode, 1);
+  process.exitCode = undefined;
+});
+
+test('run prints the real package version for --version, -v, and version', async () => {
+  for (const argv of [['--version'], ['-v'], ['version']]) {
+    const { out } = await captureConsole(() => run(argv));
+    assert.equal(out.join('\n').trim(), `hopchat v${packageJson.version}`);
+  }
+});
+
+test('cmdHelp shows the real package version, not a hardcoded one', async () => {
+  const { out } = await captureConsole(() => run(['--help']));
+  const text = out.join('\n');
+  assert.match(text, new RegExp(`v${packageJson.version.replace(/\./g, '\\.')}`));
+  assert.doesNotMatch(text, /v0\.2\.0/, 'the old hardcoded stale version string should not appear');
+});
+
+test('run honors the NO_COLOR env var by disabling chalk output', async () => {
+  const original = process.env.NO_COLOR;
+  process.env.NO_COLOR = '1';
+  try {
+    const { out } = await captureConsole(() => run(['platforms']));
+    assert.doesNotMatch(out.join('\n'), /\x1b\[[0-9;]*m/, 'no ANSI escape codes should be present with NO_COLOR set');
+  } finally {
+    if (original === undefined) delete process.env.NO_COLOR;
+    else process.env.NO_COLOR = original;
+  }
+});
+
+test('run honors a --no-color argv flag by disabling chalk output', async () => {
+  const { out } = await captureConsole(() => run(['platforms', '--no-color']));
+  assert.doesNotMatch(out.join('\n'), /\x1b\[[0-9;]*m/);
+});
+
+test('run prints platform names with display names and a local chat count via `platforms`', async () => {
+  const original = os.homedir;
+  os.homedir = () => path.join(__dirname, 'fixtures', 'copilot-cli'); // no .claude dir here -> claude-code reports 0
+  try {
+    const { out } = await captureConsole(() => run(['platforms']));
+    const text = out.join('\n');
+    assert.match(text, /copilot-cli/);
+    assert.match(text, /GitHub Copilot CLI/);
+    assert.match(text, /claude-code/);
+    assert.match(text, /Claude Code/);
+    assert.match(text, /local chats/);
+  } finally {
+    os.homedir = original;
+  }
+});
+
+test('run lists chats for a platform via `list`, end to end through run()', async () => {
+  const original = os.homedir;
+  os.homedir = () => MIGRATE_FIXTURE_ROOT;
+  try {
+    const { out } = await captureConsole(() => run(['list', 'copilot-cli']));
+    const text = out.join('\n');
+    assert.match(text, /fixture-chat-001/);
+    assert.match(text, /Sample Fixture Chat/);
+  } finally {
+    os.homedir = original;
+  }
+});
+
+test('run prints a usage error for `list` with no platform argument', async () => {
+  process.exitCode = undefined;
+  const { err } = await captureConsole(() => run(['list']));
+  assert.match(err.join('\n'), /Usage: hopchat list <platform>/);
   assert.equal(process.exitCode, 1);
   process.exitCode = undefined;
 });

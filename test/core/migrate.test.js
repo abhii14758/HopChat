@@ -62,3 +62,50 @@ test('migrate throws before writing anything if the source produces invalid IR',
 test('migrate throws a clear error for an unregistered platform', () => {
   assert.throws(() => migrate({ from: 'nope', to: 'also-nope', chatId: 'x' }), /Unknown platform "nope"/);
 });
+
+test('migrate hard-fails with a named error when the source IR\'s embedded format version does not match the platform\'s declared one', () => {
+  registerPlatform('fake-source', {
+    reader: { listChats: () => [], readChat: (id) => validIR({ sourceChatId: id, _sessionFormatVersion: 2 }) },
+    writer: { writeChat: () => { throw new Error('should never write -- format check must fail first'); } },
+    supportedVersions: { command: 'fake', range: ['1.0.0', '1.0.0'], sessionFormatVersion: 1 },
+  });
+  registerPlatform('fake-target', {
+    reader: { listChats: () => [], readChat: () => { throw new Error('unused'); } },
+    writer: { writeChat: () => { throw new Error('should never write'); } },
+  });
+
+  assert.throws(
+    () => migrate({ from: 'fake-source', to: 'fake-target', chatId: 'chat-1' }),
+    /format version 1.*format version 2/s
+  );
+});
+
+test('migrate proceeds normally when the embedded format version matches', () => {
+  registerPlatform('fake-source', {
+    reader: { listChats: () => [], readChat: (id) => validIR({ sourceChatId: id, _sessionFormatVersion: 1 }) },
+    writer: { writeChat: () => { throw new Error('should not write to source'); } },
+    supportedVersions: { command: 'fake', range: ['1.0.0', '1.0.0'], sessionFormatVersion: 1 },
+  });
+  registerPlatform('fake-target', {
+    reader: { listChats: () => [], readChat: () => { throw new Error('unused'); } },
+    writer: { writeChat: () => ({ newChatId: 'new-1', resumeCommand: 'fake --resume new-1' }) },
+  });
+
+  const result = migrate({ from: 'fake-source', to: 'fake-target', chatId: 'chat-1' });
+  assert.equal(result.newChatId, 'new-1');
+});
+
+test('migrate does not check format version when the platform declares none (no false positives for platforms without a format marker)', () => {
+  registerPlatform('fake-source', {
+    reader: { listChats: () => [], readChat: (id) => validIR({ sourceChatId: id }) }, // no _sessionFormatVersion at all
+    writer: { writeChat: () => { throw new Error('should not write to source'); } },
+    supportedVersions: { command: 'fake', range: ['1.0.0', '1.0.0'] }, // no sessionFormatVersion declared
+  });
+  registerPlatform('fake-target', {
+    reader: { listChats: () => [], readChat: () => { throw new Error('unused'); } },
+    writer: { writeChat: () => ({ newChatId: 'new-1', resumeCommand: 'fake --resume new-1' }) },
+  });
+
+  const result = migrate({ from: 'fake-source', to: 'fake-target', chatId: 'chat-1' });
+  assert.equal(result.newChatId, 'new-1');
+});

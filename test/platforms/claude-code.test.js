@@ -152,4 +152,39 @@ test('readChat throws a clear user-facing error when the chat has no cwd', () =>
   }
 });
 
+test('sanitizeCwdToProjectDir handles a POSIX-style cwd (no drive letter, forward slashes)', () => {
+  assert.equal(sanitizeCwdToProjectDir('/home/alice/projects/sample-app'), '-home-alice-projects-sample-app');
+});
+
+test('writeChat and readChat round-trip a POSIX-style cwd correctly', () => {
+  const ir = {
+    sourcePlatform: 'copilot-cli',
+    sourceChatId: 'orig-posix',
+    title: 'POSIX path round trip',
+    cwd: '/home/alice/projects/sample-app',
+    gitBranch: 'main',
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:01:00.000Z',
+    turns: [{ role: 'user', text: 'hi' }],
+  };
+
+  let newChatId;
+  try {
+    withFakeHome(() => {
+      const result = writeChat(ir);
+      newChatId = result.newChatId;
+      const readBack = readChat(newChatId);
+      assert.equal(readBack.cwd, ir.cwd);
+    });
+  } finally {
+    const projectDir = path.join(FIXTURE_ROOT, '.claude', 'projects', sanitizeCwdToProjectDir(ir.cwd));
+    fs.rmSync(projectDir, { recursive: true, force: true });
+  }
+});
+
+test('readChat rejects a chat id containing a path separator or ".." (path-traversal guard)', () => {
+  assert.throws(() => withFakeHome(() => readChat('../evil')), /Invalid chat id/);
+  assert.throws(() => withFakeHome(() => readChat('..\\evil')), /Invalid chat id/);
+});
+
 module.exports = { withFakeHome, FIXTURE_ROOT };

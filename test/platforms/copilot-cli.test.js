@@ -42,6 +42,36 @@ test('readChat throws a clear error for an unknown chat id', () => {
   assert.throws(() => withFakeHome(() => readChat('does-not-exist')), /No Copilot CLI chat found/);
 });
 
+test('readChat rejects a chat id containing a path separator or ".." (path-traversal guard)', () => {
+  assert.throws(() => withFakeHome(() => readChat('../evil')), /Invalid chat id/);
+  assert.throws(() => withFakeHome(() => readChat('..\\evil')), /Invalid chat id/);
+});
+
+test('readChat skips a malformed/truncated events.jsonl line instead of throwing', () => {
+  const chatDir = path.join(FIXTURE_ROOT, '.copilot', 'session-state', 'fixture-corrupt-line');
+  try {
+    fs.mkdirSync(chatDir, { recursive: true });
+    fs.writeFileSync(
+      chatDir + path.sep + 'workspace.yaml',
+      'id: fixture-corrupt-line\ncwd: C:\\repo\nname: Corrupt line chat\ncreated_at: 2026-01-01T00:00:00.000Z\nupdated_at: 2026-01-01T00:00:02.000Z\n'
+    );
+    const lines = [
+      '{"type":"session.start","data":{"sessionId":"fixture-corrupt-line","version":1},"id":"e1","timestamp":"2026-01-01T00:00:00.000Z","parentId":null}',
+      '{"type":"user.message","data":{"content":"hi"}"id":"e2"', // truncated/invalid JSON -- simulates a CLI killed mid-write
+      '{"type":"user.message","data":{"content":"still readable"},"id":"e3","timestamp":"2026-01-01T00:00:01.000Z","parentId":"e1"}',
+    ];
+    fs.writeFileSync(chatDir + path.sep + 'events.jsonl', lines.join('\n') + '\n');
+
+    withFakeHome(() => {
+      const ir = readChat('fixture-corrupt-line');
+      assert.equal(ir.turns.length, 1);
+      assert.equal(ir.turns[0].text, 'still readable');
+    });
+  } finally {
+    fs.rmSync(chatDir, { recursive: true, force: true });
+  }
+});
+
 test('writeChat produces a chat that readChat can parse back with the same turns', () => {
   const ir = {
     sourcePlatform: 'copilot-cli',
@@ -175,6 +205,38 @@ test('writeChat round-trips a title and cwd containing special characters exactl
       assert.equal(readBack.title, ir.title, 'title preserved exactly (colon/quote/backslash/newline)');
       assert.equal(readBack.cwd, ir.cwd, 'cwd with space preserved');
       assert.equal(readBack.gitBranch, ir.gitBranch, 'branch with colon preserved');
+    });
+  } finally {
+    if (newChatId) {
+      fs.rmSync(path.join(FIXTURE_ROOT, '.copilot', 'session-state', newChatId), { recursive: true, force: true });
+    }
+  }
+});
+
+test('writeChat and readChat round-trip a POSIX-style cwd correctly', () => {
+  // Every other fixture/hardcoded cwd in this test suite is Windows-shaped
+  // (C:\...) -- a real Copilot CLI install on Linux/macOS would produce a
+  // forward-slash, no-drive-letter path instead, and nothing previously
+  // proved that case works, only that it was never Windows-assumption-broken
+  // by accident.
+  const ir = {
+    sourcePlatform: 'copilot-cli',
+    sourceChatId: 'orig-posix',
+    title: 'POSIX path round trip',
+    cwd: '/home/alice/projects/sample-app',
+    gitBranch: 'main',
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:01:00.000Z',
+    turns: [{ role: 'user', text: 'hi' }],
+  };
+
+  let newChatId;
+  try {
+    withFakeHome(() => {
+      const result = writeChat(ir);
+      newChatId = result.newChatId;
+      const readBack = readChat(newChatId);
+      assert.equal(readBack.cwd, ir.cwd);
     });
   } finally {
     if (newChatId) {
